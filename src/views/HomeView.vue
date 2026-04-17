@@ -373,10 +373,7 @@ onUnmounted(() => {
             aria-label="Tua audio"
             @pointerdown="onSeekSliderPointerDown"
           >
-            <div
-              class="absolute inset-0 opacity-40"
-              style="background: repeating-linear-gradient(90deg, rgba(255,255,255,0.3) 0, rgba(255,255,255,0.3) 3px, transparent 3px, transparent 9px)"
-            />
+            <div class="absolute inset-0 rounded-3xl bg-white/10" />
             <div
               class="absolute inset-y-0 left-0 rounded-3xl bg-linear-to-r from-emerald-300 to-white shadow-[0_0_12px_2px] shadow-emerald-300/60"
               :class="isSeekDragging ? 'transition-none' : 'transition-all'"
