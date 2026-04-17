@@ -1,0 +1,15 @@
+@import 'tailwindcss';
+
+*::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ẩn scrollbar cho IE, Edge cũ */
+* {
+  -ms-overflow-style: none;
+}
+
+/* Ẩn scrollbar cho Firefox */
+* {
+  scrollbar-width: none;
+}
