@@ -254,6 +254,11 @@ async function handleShuffle() {
   await player.shuffleAndPlay(playbackList.map((track) => track.id))
 }
 
+async function handleTogglePlayback() {
+  player.togglePlayback()
+  await scrollActiveTrackIntoView()
+}
+
 async function applySort(nextSort: TrackSortOption) {
   selectedSort.value = nextSort
   writeViewState()
@@ -284,7 +289,7 @@ async function scrollActiveTrackIntoView() {
   if (index < 0) return
 
   // scrollToItem sẽ đưa item vào viewport (thường align top, đủ mượt mà trên mobile)
-  scroller.value.scrollToItem(index - 2)
+  scroller.value.scrollToItem(index - 1)
 }
 
 watch(
@@ -327,8 +332,13 @@ onMounted(async () => {
 
   writeViewState()
 
-  if (player.identifier === PLAYLIST_SOURCE_URL && player.audios.length > 0) return
+  if (player.identifier === PLAYLIST_SOURCE_URL && player.audios.length > 0) {
+    await scrollActiveTrackIntoView()
+    return
+  }
+
   await player.loadAudios(PLAYLIST_SOURCE_URL, { downloadBaseUrl: DOWNLOAD_BASE_URL })
+  await scrollActiveTrackIntoView()
 })
 
 onUnmounted(() => {
@@ -563,7 +573,7 @@ onUnmounted(() => {
             <button
               type="button"
               class="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-black shadow-[0_0_12px_2px] shadow-white/40 transition active:scale-95"
-              @click="player.togglePlayback"
+              @click="handleTogglePlayback"
             >
               <div
                 v-if="buffering"
