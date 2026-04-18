@@ -56,7 +56,7 @@ const trackPositionLabel = computed(() => {
 const displayDuration = computed(() => player.duration || currentTrack.value?.durationHint || 0)
 const buffering = computed(() => player.playerState === 'buffering')
 const sortButtonLabel = computed(() =>
-  sortByPlays.value === 'desc' ? 'Nghe nhiều đến ít' : 'Nghe ít đến nhiều'
+  sortByPlays.value === 'desc' ? 'Nghe nhiều đến ít' : 'Nghe ít đến nhiều',
 )
 
 const {
@@ -165,7 +165,9 @@ async function handlePrev() {
 
   const activeIndex = playbackList.findIndex((track) => track.id === currentTrack.value?.id)
   const previousIndex =
-    activeIndex >= 0 ? (activeIndex - 1 + playbackList.length) % playbackList.length : playbackList.length - 1
+    activeIndex >= 0
+      ? (activeIndex - 1 + playbackList.length) % playbackList.length
+      : playbackList.length - 1
 
   await selectTrack(playbackList[previousIndex]!.id)
 }
@@ -186,8 +188,15 @@ async function handleShuffle() {
 
 async function toggleSortDirection() {
   sortByPlays.value = sortByPlays.value === 'desc' ? 'asc' : 'desc'
-  const sortedSubset = sortTracksByPlayCount(filteredAudios.value, player.playCounts, sortByPlays.value)
-  player.audios = moveTracksToFront(player.audios, sortedSubset.map((track) => track.id))
+  const sortedSubset = sortTracksByPlayCount(
+    filteredAudios.value,
+    player.playCounts,
+    sortByPlays.value,
+  )
+  player.audios = moveTracksToFront(
+    player.audios,
+    sortedSubset.map((track) => track.id),
+  )
 
   await playFirstFromCurrentList()
 }
@@ -204,14 +213,17 @@ async function scrollActiveTrackIntoView() {
   scroller.value.scrollToItem(index - 2)
 }
 
-watch(() => query.value, async (next, prev) => {
-  if (next === prev) return
-  if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
-})
+watch(
+  () => query.value,
+  async (next, prev) => {
+    if (next === prev) return
+    if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
+  },
+)
 
 watch(
-  () => [player.currentIndex, filteredAudios.value.map(t => t.id).join('|')],
-  async () => await scrollActiveTrackIntoView()
+  () => [player.currentIndex, filteredAudios.value.map((t) => t.id).join('|')],
+  async () => await scrollActiveTrackIntoView(),
 )
 
 onMounted(async () => {
@@ -230,17 +242,17 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-svh overflow-hidden bg-[#050505] text-white">
-    <main class="mx-auto flex h-full w-full max-w-sm flex-col overflow-hidden px-3 pb-52 pt-2">
+  <div class="h-svh w-svw bg-[#050505] text-white px-3">
+    <main class="flex h-full w-full flex-col">
       <!-- HEADER -->
       <div class="sticky top-0 z-10 shrink-0 bg-[#050505]">
         <!-- Timer -->
-        <section class="border-b border-white/10 pb-4 pt-1">
-          <div class="flex items-center justify-between gap-4">
+        <section class="border-b border-white/10 py-3">
+          <div class="flex items-center justify-between gap-3">
             <span class="text-base font-medium text-white/90">Hẹn giờ ngủ</span>
             <button
               type="button"
-              class="flex h-10 items-center gap-3 rounded-3xl border border-white/10 bg-[#111113] px-4 text-base font-semibold shadow-inner active:scale-[0.97]"
+              class="flex flex-1 h-10 items-center gap-3 rounded-3xl border border-white/10 bg-[#111113] px-4 text-base font-semibold shadow-inner active:scale-[0.97]"
               @click="openTimerPicker"
             >
               <Clock3 class="h-5 w-5 text-emerald-400" />
@@ -254,9 +266,7 @@ onUnmounted(() => {
               type="button"
               class="h-10 min-w-22 rounded-3xl px-2 text-base font-semibold active:scale-[0.97]"
               :class="
-                timerDeadline
-                  ? 'bg-white/10 text-white hover:bg-white/20'
-                  : 'bg-white text-black'
+                timerDeadline ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-black'
               "
               @click="timerDeadline ? clearSleepTimer() : handlePrimaryAction()"
             >
@@ -266,10 +276,12 @@ onUnmounted(() => {
         </section>
 
         <!-- Search + Sort -->
-        <section class="pt-4">
+        <section class="py-3">
           <div class="flex gap-2">
             <div class="relative flex-1">
-              <Search class="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-white/50" />
+              <Search
+                class="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-white/50"
+              />
               <input
                 v-model="query"
                 type="text"
@@ -293,11 +305,8 @@ onUnmounted(() => {
       </div>
 
       <!-- LIST - Sử dụng vue-virtual-scroller -->
-      <section class="flex-1 overflow-hidden pt-4">
-        <div
-          v-if="player.loading && player.audios.length === 0"
-          class="space-y-3 px-1"
-        >
+      <section class="flex-1 overflow-hidden bg-[#050505]">
+        <div v-if="player.loading && player.audios.length === 0" class="space-y-3">
           <div v-for="n in 8" :key="n" class="h-16 animate-pulse rounded-3xl bg-white/5" />
         </div>
 
@@ -313,21 +322,21 @@ onUnmounted(() => {
           v-else
           ref="scroller"
           :items="filteredAudios"
-          :item-size="56" 
+          :item-size="54"
           :key-field="'id'"
-          class="hide-scrollbar h-full px-1 pb-6"
+          class="hide-scrollbar h-full pb-3"
         >
           <template #default="{ item: track }">
             <button
               :data-track-id="track.id"
               type="button"
-              class="block w-full rounded-3xl px-5 py-4 text-left hover:bg-white/5 active:scale-[0.98]"
+              class="block w-full rounded-3xl p-3 text-left hover:bg-white/5 active:scale-[0.98]"
               :class="{ 'bg-white/10 shadow-inner': track.id === currentTrack?.id }"
               @click="selectTrack(track.id)"
             >
               <div class="flex justify-between">
                 <p
-                  class="flex-1 text-[17px] font-medium leading-tight pr-4 line-clamp-1"
+                  class="flex-1 text-[17px] font-medium leading-tight pr-3 line-clamp-1"
                   :class="track.id === currentTrack?.id ? 'text-white' : 'text-white/90'"
                 >
                   {{ track.title }}
@@ -336,101 +345,103 @@ onUnmounted(() => {
                   <span class="tabular-nums text-xs font-medium text-white/40">
                     {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
                   </span>
-                  <span class="ml-1 text-[10px] font-medium uppercase tracking-widest text-white/30">lượt</span>
                 </div>
               </div>
             </button>
           </template>
         </RecycleScroller>
       </section>
-    </main>
 
-    <!-- BOTTOM PLAYER (không thay đổi) -->
-    <section class="fixed inset-x-0 bottom-0 bg-[#050505] shadow-[0_-8px_25px_-8px] shadow-black/70">
-      <div class="mx-auto max-w-sm border-t border-white/10 px-4 pb-5 pt-4">
-        <!-- Info -->
-        <div class="mb-4 text-center">
-          <p class="line-clamp-1 text-2xl font-semibold tracking-tight text-white">
-            {{ currentTrack?.title || 'Chưa chọn bài hát' }}
-          </p>
-          <p class="mt-1 text-sm font-medium text-white/50">
-            {{ trackPositionLabel }}
-          </p>
-        </div>
-
-        <!-- Progress -->
-        <div class="mb-5 flex items-center gap-3">
-          <span class="w-10 tabular-nums text-sm font-medium text-white/70">
-            {{ formatDuration(displayedCurrentTime) }}
-          </span>
-          <div
-            ref="seekSliderTrackRef"
-            class="relative h-3 flex-1 cursor-pointer rounded-3xl bg-white/10 touch-none select-none"
-            role="slider"
-            :aria-valuemin="0"
-            :aria-valuemax="displayDuration"
-            :aria-valuenow="Math.round(seekSliderPreviewValue)"
-            aria-label="Tua audio"
-            @pointerdown="onSeekSliderPointerDown"
-          >
-            <div class="absolute inset-0 rounded-3xl bg-white/10" />
-            <div
-              class="absolute inset-y-0 left-0 rounded-3xl bg-linear-to-r from-emerald-300 to-white shadow-[0_0_12px_2px] shadow-emerald-300/60"
-              :class="isSeekDragging ? 'transition-none' : 'transition-all'"
-              :style="{ width: `${seekSliderProgress}%` }"
-            />
+      <!-- BOTTOM PLAYER (không thay đổi) -->
+      <section class="bg-[#050505]">
+        <div class="mx-auto border-t border-white/10 py-6 px-3 flex flex-col gap-3">
+          <!-- Info -->
+          <div class="text-center">
+            <p class="line-clamp-1 text-2xl font-semibold tracking-tight text-white">
+              {{ currentTrack?.title || 'Chưa chọn bài hát' }}
+            </p>
+            <p class="text-sm font-medium text-white/50 mt-1">
+              {{ trackPositionLabel }}
+            </p>
           </div>
-          <span class="w-10 tabular-nums text-sm font-medium text-white/70 text-right">
-            {{ formatDuration(displayDuration) }}
-          </span>
+
+          <!-- Progress -->
+          <div class="flex items-center gap-3">
+            <span class="tabular-nums text-sm font-medium text-white/70">
+              {{ formatDuration(displayedCurrentTime) }}
+            </span>
+            <div
+              ref="seekSliderTrackRef"
+              class="relative h-3 flex-1 cursor-pointer rounded-3xl bg-white/10 touch-none select-none"
+              role="slider"
+              :aria-valuemin="0"
+              :aria-valuemax="displayDuration"
+              :aria-valuenow="Math.round(seekSliderPreviewValue)"
+              aria-label="Tua audio"
+              @pointerdown="onSeekSliderPointerDown"
+            >
+              <div class="absolute inset-0 rounded-3xl bg-white/10" />
+              <div
+                class="absolute inset-y-0 left-0 rounded-3xl bg-linear-to-r from-emerald-300 to-white shadow-[0_0_12px_2px] shadow-emerald-300/60"
+                :class="isSeekDragging ? 'transition-none' : 'transition-all'"
+                :style="{ width: `${seekSliderProgress}%` }"
+              />
+            </div>
+            <span class="tabular-nums text-sm font-medium text-white/70 text-right">
+              {{ formatDuration(displayDuration) }}
+            </span>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex items-center justify-between">
+            <button
+              type="button"
+              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95 disabled:opacity-40"
+              :disabled="player.loading"
+              @click="handleReload"
+            >
+              <RefreshCcw :class="{ 'animate-spin': player.loading }" class="h-7 w-7" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              @click="handlePrev"
+            >
+              <SkipBack class="h-7 w-7" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-black shadow-[0_0_12px_2px] shadow-white/40 transition active:scale-95"
+              @click="player.togglePlayback"
+            >
+              <div
+                v-if="buffering"
+                class="h-8 w-8 animate-spin rounded-full border-4 border-black/20 border-t-black"
+              />
+              <Pause v-else-if="player.playing" class="h-10 w-10" />
+              <Play v-else class="ml-1 h-10 w-10" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              @click="handleNext"
+            >
+              <SkipForward class="h-7 w-7" />
+            </button>
+
+            <button
+              type="button"
+              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              @click="handleShuffle"
+            >
+              <Shuffle class="h-7 w-7" />
+            </button>
+          </div>
         </div>
-
-        <!-- Controls -->
-        <div class="flex items-center justify-between px-1">
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95 disabled:opacity-40"
-            :disabled="player.loading"
-            @click="handleReload"
-          >
-            <RefreshCcw :class="{ 'animate-spin': player.loading }" class="h-7 w-7" />
-          </button>
-
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
-            @click="handlePrev"
-          >
-            <SkipBack class="h-7 w-7" />
-          </button>
-
-          <button
-            type="button"
-            class="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-black shadow-[0_0_12px_2px] shadow-white/40 transition active:scale-95"
-            @click="player.togglePlayback"
-          >
-            <div v-if="buffering" class="h-8 w-8 animate-spin rounded-full border-4 border-black/20 border-t-black" />
-            <Pause v-else-if="player.playing" class="h-10 w-10" />
-            <Play v-else class="ml-1 h-10 w-10" />
-          </button>
-
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
-            @click="handleNext"
-          >
-            <SkipForward class="h-7 w-7" />
-          </button>
-
-          <button
-            type="button"
-            class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
-            @click="handleShuffle"
-          >
-            <Shuffle class="h-7 w-7" />
-          </button>
-        </div>
-      </div>
-    </section>
+      </section>
+    </main>
   </div>
 </template>

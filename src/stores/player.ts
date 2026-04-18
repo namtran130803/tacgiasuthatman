@@ -184,7 +184,8 @@ export const usePlayerStore = defineStore('player', () => {
       }
       writeSnapshot()
     } catch (loadError) {
-      const message = loadError instanceof Error ? loadError.message : 'Unable to load audio library.'
+      const message =
+        loadError instanceof Error ? loadError.message : 'Unable to load audio library.'
       error.value = message
       audios.value = []
       currentIndex.value = -1
