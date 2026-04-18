@@ -496,7 +496,7 @@ onUnmounted(() => {
           v-else
           ref="scroller"
           :items="filteredAudios"
-          :item-size="114"
+          :item-size="92"
           :key-field="'id'"
           class="hide-scrollbar h-full pb-3"
         >
@@ -511,15 +511,13 @@ onUnmounted(() => {
               <div class="flex flex-col gap-2">
                 <div class="flex justify-between">
                   <p
-                    class="flex-1 text-[17px] font-medium leading-tight line-clamp-1"
+                    class="flex-1 font-medium line-clamp-1"
                     :class="track.id === currentTrack?.id ? 'text-white' : 'text-white/90'"
                   >
                     {{ track.title }}
                   </p>
-                </div>
 
-                <div class="space-y-2 text-[11px] text-white/50">
-                  <div class="flex flex-wrap gap-2">
+                  <div class="flex flex-wrap gap-2 text-sm">
                     <span
                       class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
                       aria-label="Lượt phát"
@@ -535,7 +533,10 @@ onUnmounted(() => {
                       {{ track.viewCount.toLocaleString('vi-VN') }}
                     </span>
                   </div>
-                  <div class="flex flex-wrap gap-2">
+                </div>
+
+                <div class="space-y-2 text-sm text-white/50">
+                  <div class="flex flex-wrap gap-2 justify-end">
                     <span
                       class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
                       aria-label="Lượt thích"
@@ -577,7 +578,7 @@ onUnmounted(() => {
         <div class="mx-auto border-t border-white/10 py-6 px-3 flex flex-col gap-3">
           <!-- Info -->
           <div class="text-center">
-            <p class="line-clamp-1 text-2xl font-semibold tracking-tight text-white">
+            <p class="line-clamp-1 text-xl font-semibold tracking-tight text-white">
               {{ currentTrack?.title || 'Chưa chọn bài hát' }}
             </p>
             <p class="text-sm font-medium text-white/50 mt-1">
