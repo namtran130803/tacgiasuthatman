@@ -104,6 +104,21 @@ export const usePlayerStore = defineStore('player', () => {
     writeSnapshot()
   }
 
+  function preloadNextTrack(baseIndex = currentIndex.value) {
+    if (audios.value.length < 2) {
+      return
+    }
+
+    const normalizedBaseIndex = baseIndex >= 0 ? baseIndex : 0
+    const nextIndex = (normalizedBaseIndex + 1) % audios.value.length
+    const nextTrack = audios.value[nextIndex]
+    if (!nextTrack) {
+      return
+    }
+
+    audioPlayer.preload(nextTrack)
+  }
+
   function bindPlayerEvents() {
     audioPlayer.configure({
       onPlay: () => {
@@ -112,6 +127,7 @@ export const usePlayerStore = defineStore('player', () => {
         error.value = ''
         duration.value = audioPlayer.getDuration()
         startProgressTimer()
+        preloadNextTrack()
         writeSnapshot()
       },
       onPause: () => {
@@ -220,6 +236,7 @@ export const usePlayerStore = defineStore('player', () => {
     writeSnapshot()
 
     await audioPlayer.load(track, { force: true })
+    preloadNextTrack(index)
     if (startAt > 0) {
       audioPlayer.seek(startAt)
     }

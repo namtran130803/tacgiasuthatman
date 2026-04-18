@@ -14,8 +14,10 @@ interface AudioPlayerListeners {
 
 class AudioPlayer {
   private howl: Howl | null = null
+  private preloadedHowl: Howl | null = null
   private listeners: AudioPlayerListeners = {}
   private currentTrackId = ''
+  private preloadedTrackId = ''
 
   configure(listeners: AudioPlayerListeners) {
     this.listeners = listeners
@@ -29,7 +31,29 @@ class AudioPlayer {
     this.unloadCurrent()
 
     this.currentTrackId = track.id
+    if (this.preloadedTrackId === track.id && this.preloadedHowl) {
+      this.howl = this.preloadedHowl
+      this.preloadedHowl = null
+      this.preloadedTrackId = ''
+      this.attachListeners(this.howl)
+      return
+    }
+
     this.howl = this.createHowl(track, true)
+  }
+
+  preload(track: ArchiveAudio) {
+    if (this.currentTrackId === track.id) {
+      return
+    }
+
+    if (this.preloadedTrackId === track.id && this.preloadedHowl) {
+      return
+    }
+
+    this.unloadPreloaded()
+    this.preloadedTrackId = track.id
+    this.preloadedHowl = this.createHowl(track, false)
   }
 
   play() {
@@ -96,8 +120,15 @@ class AudioPlayer {
     this.currentTrackId = ''
   }
 
+  private unloadPreloaded() {
+    this.preloadedHowl?.unload()
+    this.preloadedHowl = null
+    this.preloadedTrackId = ''
+  }
+
   unload() {
     this.unloadCurrent()
+    this.unloadPreloaded()
   }
 
   seek(value: number) {
