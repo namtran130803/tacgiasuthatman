@@ -58,8 +58,8 @@ const sortGroups: Array<{
   asc: TrackSortOption
 }> = [
   { key: 'date', label: 'Ngày đăng', desc: 'newest', asc: 'oldest' },
-  { key: 'view', label: 'Lượt nghe', desc: 'view_desc', asc: 'view_asc' },
   { key: 'play', label: 'Lượt phát', desc: 'play_desc', asc: 'play_asc' },
+  { key: 'view', label: 'Lượt nghe', desc: 'view_desc', asc: 'view_asc' },
   { key: 'like', label: 'Lượt thích', desc: 'like_desc', asc: 'like_asc' },
   { key: 'repost', label: 'Đăng lại', desc: 'repost_desc', asc: 'repost_asc' },
   { key: 'comment', label: 'Bình luận', desc: 'comment_desc', asc: 'comment_asc' },
@@ -419,13 +419,13 @@ onUnmounted(() => {
                 >
                   <span class="text-nowrap">{{ group.label }}</span>
                   <span class="flex items-center gap-1">
-                    <ArrowUp
-                      class="h-4 w-4"
-                      :class="selectedSort === group.asc ? 'text-white' : 'text-white/35'"
-                    />
                     <ArrowDown
                       class="h-4 w-4"
                       :class="selectedSort === group.desc ? 'text-white' : 'text-white/35'"
+                    />
+                    <ArrowUp
+                      class="h-4 w-4"
+                      :class="selectedSort === group.asc ? 'text-white' : 'text-white/35'"
                     />
                   </span>
                 </button>
