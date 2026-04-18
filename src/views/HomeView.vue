@@ -3,10 +3,15 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   ArrowDown,
   ArrowUp,
+  Bookmark,
   Clock3,
+  Heart,
+  Headphones,
+  MessageCircle,
   Pause,
   Play,
   RefreshCcw,
+  Repeat2,
   Search,
   Shuffle,
   SkipBack,
@@ -54,16 +59,39 @@ let timerTimeout: number | null = null
 const sortGroups: Array<{
   key: string
   label: string
+  shortLabel: string
+  icon: any
   desc: TrackSortOption
   asc: TrackSortOption
 }> = [
-  { key: 'date', label: 'Ngày đăng', desc: 'newest', asc: 'oldest' },
-  { key: 'play', label: 'Lượt phát', desc: 'play_desc', asc: 'play_asc' },
-  { key: 'view', label: 'Lượt nghe', desc: 'view_desc', asc: 'view_asc' },
-  { key: 'like', label: 'Lượt thích', desc: 'like_desc', asc: 'like_asc' },
-  { key: 'repost', label: 'Đăng lại', desc: 'repost_desc', asc: 'repost_asc' },
-  { key: 'comment', label: 'Bình luận', desc: 'comment_desc', asc: 'comment_asc' },
-  { key: 'save', label: 'Lưu', desc: 'save_desc', asc: 'save_asc' },
+  { key: 'date', label: 'Ngày đăng', shortLabel: 'Ngày đăng', icon: Clock3, desc: 'newest', asc: 'oldest' },
+  { key: 'play', label: 'Lượt phát', shortLabel: 'Phát', icon: Play, desc: 'play_desc', asc: 'play_asc' },
+  {
+    key: 'view',
+    label: 'Lượt nghe',
+    shortLabel: 'Nghe',
+    icon: Headphones,
+    desc: 'view_desc',
+    asc: 'view_asc',
+  },
+  { key: 'like', label: 'Lượt thích', shortLabel: 'Thích', icon: Heart, desc: 'like_desc', asc: 'like_asc' },
+  {
+    key: 'repost',
+    label: 'Đăng lại',
+    shortLabel: 'Đăng lại',
+    icon: Repeat2,
+    desc: 'repost_desc',
+    asc: 'repost_asc',
+  },
+  {
+    key: 'comment',
+    label: 'Bình luận',
+    shortLabel: 'Bình luận',
+    icon: MessageCircle,
+    desc: 'comment_desc',
+    asc: 'comment_asc',
+  },
+  { key: 'save', label: 'Lưu', shortLabel: 'Lưu', icon: Bookmark, desc: 'save_desc', asc: 'save_asc' },
 ]
 
 const filteredAudios = computed(() => {
@@ -96,6 +124,7 @@ const selectedSortLabel = computed(() => {
 
   return group.label
 })
+const selectedSortShortLabel = computed(() => selectedSortGroup.value?.shortLabel || 'Sắp xếp')
 const selectedSortIsAscending = computed(() => {
   const group = selectedSortGroup.value
   if (!group) {
@@ -406,7 +435,8 @@ onUnmounted(() => {
                 :title="selectedSortLabel"
                 @click.stop="toggleSortMenu"
               >
-                <span>{{ selectedSortLabel }}</span>
+                <component :is="selectedSortGroup?.icon || Clock3" class="h-4 w-4" />
+                <span>{{ selectedSortShortLabel }}</span>
                 <ArrowUp v-if="selectedSortIsAscending" class="h-4 w-4" />
                 <ArrowDown v-else class="h-4 w-4" />
               </button>
@@ -427,7 +457,10 @@ onUnmounted(() => {
                   "
                   @click="toggleSortGroup(group.desc, group.asc)"
                 >
-                  <span class="text-nowrap">{{ group.label }}</span>
+                  <span class="flex items-center gap-2 text-nowrap">
+                    <component :is="group.icon" class="h-4 w-4" />
+                    <span>{{ group.shortLabel }}</span>
+                  </span>
                   <span class="flex items-center gap-1">
                     <ArrowDown
                       class="h-4 w-4"
@@ -463,7 +496,7 @@ onUnmounted(() => {
           v-else
           ref="scroller"
           :items="filteredAudios"
-          :item-size="115"
+          :item-size="114"
           :key-field="'id'"
           class="hide-scrollbar h-full pb-3"
         >
@@ -485,25 +518,53 @@ onUnmounted(() => {
                   </p>
                 </div>
 
-                <div class="flex flex-wrap gap-2 text-[11px] text-white/50">
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Phát {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
-                  </span>
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Nghe {{ track.viewCount.toLocaleString('vi-VN') }}
-                  </span>
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Thích {{ track.likeCount.toLocaleString('vi-VN') }}
-                  </span>
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Đăng lại {{ track.repostCount.toLocaleString('vi-VN') }}
-                  </span>
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Bình luận {{ track.commentCount.toLocaleString('vi-VN') }}
-                  </span>
-                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
-                    Lưu {{ track.saveCount.toLocaleString('vi-VN') }}
-                  </span>
+                <div class="space-y-2 text-[11px] text-white/50">
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Lượt phát"
+                    >
+                      <Play class="h-3.5 w-3.5" />
+                      {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Lượt nghe"
+                    >
+                      <Headphones class="h-3.5 w-3.5" />
+                      {{ track.viewCount.toLocaleString('vi-VN') }}
+                    </span>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Lượt thích"
+                    >
+                      <Heart class="h-3.5 w-3.5" />
+                      {{ track.likeCount.toLocaleString('vi-VN') }}
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Đăng lại"
+                    >
+                      <Repeat2 class="h-3.5 w-3.5" />
+                      {{ track.repostCount.toLocaleString('vi-VN') }}
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Bình luận"
+                    >
+                      <MessageCircle class="h-3.5 w-3.5" />
+                      {{ track.commentCount.toLocaleString('vi-VN') }}
+                    </span>
+                    <span
+                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
+                      aria-label="Lưu"
+                    >
+                      <Bookmark class="h-3.5 w-3.5" />
+                      {{ track.saveCount.toLocaleString('vi-VN') }}
+                    </span>
+                  </div>
                 </div>
               </div>
             </button>
