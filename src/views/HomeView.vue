@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
-  ArrowDownWideNarrow,
-  ArrowUpNarrowWide,
+  ArrowDown,
+  ArrowUp,
   Clock3,
   Pause,
   Play,
@@ -16,6 +16,8 @@ import {
 import { RecycleScroller } from 'vue-virtual-scroller' // ← Thêm import này
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css' // ← Import CSS (nên import 1 lần trong main.ts hoặc App.vue)
 
+import { archivePlaylistConfig } from '@/services/audioApi'
+import { readHomeViewState, writeHomeViewState } from '@/lib/playerSnapshot'
 import { usePlayerStore } from '@/stores/player'
 import {
   createDeadlineFromTime,
@@ -24,40 +26,84 @@ import {
   formatSelectedTime,
 } from '@/lib/time'
 import { useSeekSlider } from '@/lib/slider'
-import { filterTracksByQuery, moveTracksToFront, sortTracksByPlayCount } from '@/lib/trackList'
+import { filterTracksByQuery, sortTracks, type TrackSortOption } from '@/lib/trackList'
 import { formatDuration } from '@/utils/format'
 
-const ARCHIVE_IDENTIFIER = 'tiktok-tacgiasuthatman'
+const PLAYLIST_SOURCE_URL = archivePlaylistConfig.sourceUrl
+const DOWNLOAD_BASE_URL = archivePlaylistConfig.downloadBaseUrl
+const homeViewState = readHomeViewState()
 
 const player = usePlayerStore()
 
-const query = ref('')
+const query = ref(homeViewState?.query || '')
 const currentClock = ref('')
 const scroller = ref<any>(null) // ref cho RecycleScroller
+const sortMenuRef = ref<HTMLElement | null>(null)
 const timerInput = ref<HTMLInputElement | null>(null)
-const timerValue = ref('06:00')
-const timerDeadline = ref<number | null>(null)
+const timerValue = ref(homeViewState?.timerValue || '06:00')
+const timerDeadline = ref<number | null>(homeViewState?.timerDeadline ?? null)
 const timerCountdown = ref('')
-const sortByPlays = ref<'desc' | 'asc'>('desc')
+const sortMenuOpen = ref(homeViewState?.sortMenuOpen || false)
+const selectedSort = ref<TrackSortOption>(
+  (homeViewState?.selectedSort as TrackSortOption | undefined) || 'newest',
+)
 let clockInterval: number | null = null
 let timerInterval: number | null = null
 let timerTimeout: number | null = null
 
+const sortGroups: Array<{
+  key: string
+  label: string
+  desc: TrackSortOption
+  asc: TrackSortOption
+}> = [
+  { key: 'date', label: 'Ngày đăng', desc: 'newest', asc: 'oldest' },
+  { key: 'view', label: 'Lượt nghe', desc: 'view_desc', asc: 'view_asc' },
+  { key: 'play', label: 'Lượt phát', desc: 'play_desc', asc: 'play_asc' },
+  { key: 'like', label: 'Lượt thích', desc: 'like_desc', asc: 'like_asc' },
+  { key: 'repost', label: 'Đăng lại', desc: 'repost_desc', asc: 'repost_asc' },
+  { key: 'comment', label: 'Bình luận', desc: 'comment_desc', asc: 'comment_asc' },
+  { key: 'save', label: 'Lưu', desc: 'save_desc', asc: 'save_asc' },
+]
+
 const filteredAudios = computed(() => {
-  return filterTracksByQuery(player.audios, query.value)
+  const tracks = filterTracksByQuery(player.audios, query.value)
+  return sortTracks(tracks, player.playCounts, selectedSort.value)
 })
 
 const currentTrack = computed(() => player.currentAudio)
 const trackPositionLabel = computed(() => {
-  if (!currentTrack.value) return `0/${player.audios.length}`
-  return `${player.currentIndex + 1}/${player.audios.length}`
+  if (!currentTrack.value) return `0/${filteredAudios.value.length || player.audios.length}`
+
+  const activeIndex = filteredAudios.value.findIndex((track) => track.id === currentTrack.value?.id)
+  if (activeIndex < 0) {
+    return `0/${filteredAudios.value.length || player.audios.length}`
+  }
+
+  return `${activeIndex + 1}/${filteredAudios.value.length}`
 })
 
 const displayDuration = computed(() => player.duration || currentTrack.value?.durationHint || 0)
 const buffering = computed(() => player.playerState === 'buffering')
-const sortButtonLabel = computed(() =>
-  sortByPlays.value === 'desc' ? 'Nghe nhiều đến ít' : 'Nghe ít đến nhiều',
+const selectedSortGroup = computed(() =>
+  sortGroups.find((option) => option.desc === selectedSort.value || option.asc === selectedSort.value),
 )
+const selectedSortLabel = computed(() => {
+  const group = selectedSortGroup.value
+  if (!group) {
+    return 'Sắp xếp'
+  }
+
+  return group.label
+})
+const selectedSortIsAscending = computed(() => {
+  const group = selectedSortGroup.value
+  if (!group) {
+    return false
+  }
+
+  return selectedSort.value === group.asc
+})
 
 const {
   trackRef: seekSliderTrackRef,
@@ -91,6 +137,16 @@ function updateTimerCountdown() {
   timerCountdown.value = formatCountdown(Math.max(0, timerDeadline.value - Date.now()))
 }
 
+function writeViewState() {
+  writeHomeViewState({
+    query: query.value,
+    selectedSort: selectedSort.value,
+    sortMenuOpen: sortMenuOpen.value,
+    timerValue: timerValue.value,
+    timerDeadline: timerDeadline.value,
+  })
+}
+
 function clearSleepTimer() {
   if (timerInterval !== null) {
     window.clearInterval(timerInterval)
@@ -102,6 +158,7 @@ function clearSleepTimer() {
   }
   timerDeadline.value = null
   timerCountdown.value = ''
+  writeViewState()
 }
 
 function openTimerPicker() {
@@ -112,6 +169,16 @@ function openTimerPicker() {
   }
   timerInput.value.focus()
   timerInput.value.click()
+}
+
+function closeSortMenu() {
+  sortMenuOpen.value = false
+  writeViewState()
+}
+
+function toggleSortMenu() {
+  sortMenuOpen.value = !sortMenuOpen.value
+  writeViewState()
 }
 
 async function playFirstFromCurrentList() {
@@ -136,6 +203,7 @@ async function handlePrimaryAction() {
     player.pausePlayback()
     clearSleepTimer()
   }, timerDeadline.value - now.getTime())
+  writeViewState()
 }
 
 async function selectTrack(trackId: string) {
@@ -149,7 +217,7 @@ async function selectTrack(trackId: string) {
 }
 
 async function handleReload() {
-  await player.loadAudios(ARCHIVE_IDENTIFIER, { force: true })
+  await player.loadAudios(PLAYLIST_SOURCE_URL, { force: true, downloadBaseUrl: DOWNLOAD_BASE_URL })
   await nextTick()
   await playFirstFromCurrentList()
 }
@@ -186,19 +254,25 @@ async function handleShuffle() {
   await player.shuffleAndPlay(playbackList.map((track) => track.id))
 }
 
-async function toggleSortDirection() {
-  sortByPlays.value = sortByPlays.value === 'desc' ? 'asc' : 'desc'
-  const sortedSubset = sortTracksByPlayCount(
-    filteredAudios.value,
-    player.playCounts,
-    sortByPlays.value,
-  )
-  player.audios = moveTracksToFront(
-    player.audios,
-    sortedSubset.map((track) => track.id),
-  )
-
+async function applySort(nextSort: TrackSortOption) {
+  selectedSort.value = nextSort
+  writeViewState()
   await playFirstFromCurrentList()
+}
+
+async function toggleSortGroup(desc: TrackSortOption, asc: TrackSortOption) {
+  await applySort(selectedSort.value === desc ? asc : desc)
+}
+
+function handleWindowPointerDown(event: PointerEvent) {
+  if (!sortMenuOpen.value || !sortMenuRef.value) {
+    return
+  }
+
+  const target = event.target
+  if (target instanceof Node && !sortMenuRef.value.contains(target)) {
+    closeSortMenu()
+  }
 }
 
 // Cập nhật hàm scroll để dùng API của RecycleScroller
@@ -217,8 +291,14 @@ watch(
   () => query.value,
   async (next, prev) => {
     if (next === prev) return
+    writeViewState()
     if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
   },
+)
+
+watch(
+  () => timerValue.value,
+  () => writeViewState(),
 )
 
 watch(
@@ -229,13 +309,31 @@ watch(
 onMounted(async () => {
   updateClock()
   clockInterval = window.setInterval(updateClock, 30000)
+  window.addEventListener('pointerdown', handleWindowPointerDown)
 
-  if (player.identifier === ARCHIVE_IDENTIFIER && player.audios.length > 0) return
-  await player.loadAudios(ARCHIVE_IDENTIFIER)
+  if (timerDeadline.value) {
+    const remaining = timerDeadline.value - Date.now()
+    if (remaining > 0) {
+      updateTimerCountdown()
+      timerInterval = window.setInterval(updateTimerCountdown, 1000)
+      timerTimeout = window.setTimeout(() => {
+        player.pausePlayback()
+        clearSleepTimer()
+      }, remaining)
+    } else {
+      clearSleepTimer()
+    }
+  }
+
+  writeViewState()
+
+  if (player.identifier === PLAYLIST_SOURCE_URL && player.audios.length > 0) return
+  await player.loadAudios(PLAYLIST_SOURCE_URL, { downloadBaseUrl: DOWNLOAD_BASE_URL })
 })
 
 onUnmounted(() => {
   if (clockInterval) window.clearInterval(clockInterval)
+  window.removeEventListener('pointerdown', handleWindowPointerDown)
   clearSleepTimer()
   player.dispose()
 })
@@ -291,15 +389,48 @@ onUnmounted(() => {
               />
             </div>
 
-            <button
-              type="button"
-              class="flex h-11 w-11 items-center justify-center rounded-3xl border border-white/10 bg-[#141417] active:scale-95"
-              :title="sortButtonLabel"
-              @click="toggleSortDirection"
-            >
-              <ArrowDownWideNarrow v-if="sortByPlays === 'desc'" class="h-5 w-5" />
-              <ArrowUpNarrowWide v-else class="h-5 w-5" />
-            </button>
+            <div ref="sortMenuRef" class="relative">
+              <button
+                type="button"
+                class="flex h-11 items-center justify-center gap-2 rounded-3xl border border-white/10 bg-[#141417] px-4 text-sm font-medium text-white active:scale-95"
+                :title="selectedSortLabel"
+                @click.stop="toggleSortMenu"
+              >
+                <span>{{ selectedSortLabel }}</span>
+                <ArrowUp v-if="selectedSortIsAscending" class="h-4 w-4" />
+                <ArrowDown v-else class="h-4 w-4" />
+              </button>
+
+              <div
+                v-if="sortMenuOpen"
+                class="absolute right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-3xl border border-white/10 bg-[#141417] py-2 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
+              >
+                <button
+                  v-for="group in sortGroups"
+                  :key="group.key"
+                  type="button"
+                  class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition hover:bg-white/10"
+                  :class="
+                    selectedSort === group.desc || selectedSort === group.asc
+                      ? 'text-white'
+                      : 'text-white/75'
+                  "
+                  @click="toggleSortGroup(group.desc, group.asc)"
+                >
+                  <span class="text-nowrap">{{ group.label }}</span>
+                  <span class="flex items-center gap-1">
+                    <ArrowUp
+                      class="h-4 w-4"
+                      :class="selectedSort === group.asc ? 'text-white' : 'text-white/35'"
+                    />
+                    <ArrowDown
+                      class="h-4 w-4"
+                      :class="selectedSort === group.desc ? 'text-white' : 'text-white/35'"
+                    />
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
         </section>
       </div>
@@ -322,7 +453,7 @@ onUnmounted(() => {
           v-else
           ref="scroller"
           :items="filteredAudios"
-          :item-size="54"
+          :item-size="115"
           :key-field="'id'"
           class="hide-scrollbar h-full pb-3"
         >
@@ -334,16 +465,34 @@ onUnmounted(() => {
               :class="{ 'bg-white/10 shadow-inner': track.id === currentTrack?.id }"
               @click="selectTrack(track.id)"
             >
-              <div class="flex justify-between">
-                <p
-                  class="flex-1 text-[17px] font-medium leading-tight pr-3 line-clamp-1"
-                  :class="track.id === currentTrack?.id ? 'text-white' : 'text-white/90'"
-                >
-                  {{ track.title }}
-                </p>
-                <div class="text-right">
-                  <span class="tabular-nums text-xs font-medium text-white/40">
-                    {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
+              <div class="flex flex-col gap-2">
+                <div class="flex justify-between">
+                  <p
+                    class="flex-1 text-[17px] font-medium leading-tight line-clamp-1"
+                    :class="track.id === currentTrack?.id ? 'text-white' : 'text-white/90'"
+                  >
+                    {{ track.title }}
+                  </p>
+                </div>
+
+                <div class="flex flex-wrap gap-2 text-[11px] text-white/50">
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Phát {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
+                  </span>
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Nghe {{ track.viewCount.toLocaleString('vi-VN') }}
+                  </span>
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Thích {{ track.likeCount.toLocaleString('vi-VN') }}
+                  </span>
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Đăng lại {{ track.repostCount.toLocaleString('vi-VN') }}
+                  </span>
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Bình luận {{ track.commentCount.toLocaleString('vi-VN') }}
+                  </span>
+                  <span class="rounded-full bg-white/5 px-2 py-1 tabular-nums">
+                    Lưu {{ track.saveCount.toLocaleString('vi-VN') }}
                   </span>
                 </div>
               </div>

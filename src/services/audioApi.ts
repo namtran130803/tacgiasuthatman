@@ -1,22 +1,3 @@
-export interface ArchiveFile {
-  name: string
-  format?: string
-  mtime?: string
-  title?: string
-  creator?: string
-  length?: string
-}
-
-interface ArchiveMetadataResponse {
-  server: string
-  dir: string
-  files?: ArchiveFile[]
-  metadata?: {
-    title?: string
-    creator?: string
-  }
-}
-
 export interface ArchiveAudio {
   id: string
   identifier: string
@@ -28,6 +9,41 @@ export interface ArchiveAudio {
   artworkUrl: string
   mtime: number
   durationHint: number
+  viewCount: number
+  likeCount: number
+  repostCount: number
+  commentCount: number
+  saveCount: number
+}
+
+interface PlaylistEntryThumbnail {
+  url?: string
+  preference?: number
+}
+
+interface PlaylistEntry {
+  id?: string
+  title?: string
+  description?: string
+  timestamp?: number
+  duration?: number
+  view_count?: number
+  like_count?: number
+  repost_count?: number
+  comment_count?: number
+  save_count?: number
+  uploader?: string
+  channel?: string
+  track?: string
+  album?: string
+  artists?: string[]
+  thumbnails?: PlaylistEntryThumbnail[]
+}
+
+interface PlaylistResponse {
+  id?: string
+  title?: string
+  entries?: PlaylistEntry[]
 }
 
 interface CachedLibrary {
@@ -35,74 +51,29 @@ interface CachedLibrary {
   fetchedAt: number
 }
 
-const BASE_URL = 'https://archive.org/metadata'
-const CACHE_PREFIX = 'archive-player:library:v2'
+const CACHE_PREFIX = 'archive-player:library:v3'
 const CACHE_TTL = 1000 * 60 * 30
+const DEFAULT_PLAYLIST_URL = 'https://archive.org/download/namtran-tacgiasuthatman/data.json'
+const DEFAULT_DOWNLOAD_BASE_URL = 'https://archive.org/download/namtran-tacgiasuthatman'
 
 function removeExtension(value: string) {
   return value.replace(/\.[^/.]+$/, '')
 }
 
-function cleanTitle(value: string) {
-  return removeExtension(value).normalize('NFKC').replace(/#.*$/, '').trim()
+function stripHashtags(value: string) {
+  return value.replace(/\s+#.+$/u, '').trim()
 }
 
-function toTimestamp(value?: string) {
-  if (!value) {
-    return 0
-  }
-
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
+function normalizeText(value?: string) {
+  return (value || '').normalize('NFKC').trim()
 }
 
-function parseDuration(value?: string) {
-  if (!value) {
-    return 0
-  }
-
-  const normalized = value.trim()
-  if (!normalized) {
-    return 0
-  }
-
-  if (/^\d+(\.\d+)?$/.test(normalized)) {
-    const seconds = Number(normalized)
-    return Number.isFinite(seconds) ? seconds : 0
-  }
-
-  const segments = normalized.split(':').map((part) => Number(part))
-  if (segments.some((part) => !Number.isFinite(part))) {
-    return 0
-  }
-
-  if (segments.length === 3) {
-    const [hours = 0, minutes = 0, seconds = 0] = segments
-    return hours * 3600 + minutes * 60 + seconds
-  }
-
-  if (segments.length === 2) {
-    const [minutes = 0, seconds = 0] = segments
-    return minutes * 60 + seconds
-  }
-
-  return 0
+function getCacheKey(sourceUrl: string) {
+  return `${CACHE_PREFIX}:${sourceUrl}`
 }
 
-function buildTrackUrl(server: string, dir: string, filename: string) {
-  return `https://${server}${dir}/${encodeURIComponent(filename)}`
-}
-
-function buildArtworkUrl(identifier: string) {
-  return `https://archive.org/services/img/${encodeURIComponent(identifier)}`
-}
-
-function getCacheKey(identifier: string) {
-  return `${CACHE_PREFIX}:${identifier}`
-}
-
-function readCache(identifier: string) {
-  const raw = localStorage.getItem(getCacheKey(identifier))
+function readCache(sourceUrl: string) {
+  const raw = localStorage.getItem(getCacheKey(sourceUrl))
   if (!raw) {
     return null
   }
@@ -110,72 +81,115 @@ function readCache(identifier: string) {
   try {
     const parsed = JSON.parse(raw) as CachedLibrary
     if (Date.now() - parsed.fetchedAt > CACHE_TTL) {
-      localStorage.removeItem(getCacheKey(identifier))
+      localStorage.removeItem(getCacheKey(sourceUrl))
       return null
     }
 
     return parsed.audios
   } catch {
-    localStorage.removeItem(getCacheKey(identifier))
+    localStorage.removeItem(getCacheKey(sourceUrl))
     return null
   }
 }
 
-function writeCache(identifier: string, audios: ArchiveAudio[]) {
+function writeCache(sourceUrl: string, audios: ArchiveAudio[]) {
   const payload: CachedLibrary = {
     audios,
     fetchedAt: Date.now(),
   }
 
-  localStorage.setItem(getCacheKey(identifier), JSON.stringify(payload))
+  localStorage.setItem(getCacheKey(sourceUrl), JSON.stringify(payload))
 }
 
-function mapArchiveAudio(
-  identifier: string,
-  response: ArchiveMetadataResponse,
-  file: ArchiveFile,
-): ArchiveAudio {
-  const title = cleanTitle(file.title || file.name)
-  const artist = response.metadata?.creator || file.creator || identifier
-  const album = response.metadata?.title || identifier
+function toSafeNumber(value: unknown) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function buildMp3Url(downloadBaseUrl: string, entryId: string) {
+  return `${downloadBaseUrl.replace(/\/$/, '')}/${encodeURIComponent(entryId)}.mp3`
+}
+
+function pickArtworkUrl(entry: PlaylistEntry) {
+  if (!Array.isArray(entry.thumbnails) || entry.thumbnails.length === 0) {
+    return ''
+  }
+
+  const sorted = [...entry.thumbnails].sort(
+    (left, right) => (right.preference ?? Number.NEGATIVE_INFINITY) - (left.preference ?? Number.NEGATIVE_INFINITY),
+  )
+
+  return sorted[0]?.url || ''
+}
+
+function mapPlaylistEntry(
+  playlist: PlaylistResponse,
+  entry: PlaylistEntry,
+  downloadBaseUrl: string,
+): ArchiveAudio | null {
+  const entryId = normalizeText(entry.id)
+  if (!entryId) {
+    return null
+  }
+
+  const title = normalizeText(entry.title || entry.description || entry.track || entryId)
+  const filename = `${entryId}.mp3`
+  const artist = normalizeText(entry.artists?.[0] || entry.channel || entry.uploader || playlist.title || 'Unknown')
+  const album = normalizeText(entry.album || playlist.title || 'Archive playlist')
 
   return {
-    id: `${identifier}:${file.name}`,
-    identifier,
-    title,
+    id: entryId,
+    identifier: playlist.id || 'archive-playlist',
+    title: stripHashtags(removeExtension(title)),
     artist,
     album,
-    filename: file.name,
-    url: buildTrackUrl(response.server, response.dir, file.name),
-    artworkUrl: buildArtworkUrl(identifier),
-    mtime: toTimestamp(file.mtime),
-    durationHint: parseDuration(file.length),
+    filename,
+    url: buildMp3Url(downloadBaseUrl, entryId),
+    artworkUrl: pickArtworkUrl(entry),
+    mtime: toSafeNumber(entry.timestamp),
+    durationHint: toSafeNumber(entry.duration),
+    viewCount: toSafeNumber(entry.view_count),
+    likeCount: toSafeNumber(entry.like_count),
+    repostCount: toSafeNumber(entry.repost_count),
+    commentCount: toSafeNumber(entry.comment_count),
+    saveCount: toSafeNumber(entry.save_count),
   }
 }
 
-export async function fetchArchiveAudios(identifier: string, options?: { force?: boolean }) {
+export async function fetchArchiveAudios(
+  sourceUrl = DEFAULT_PLAYLIST_URL,
+  options?: { force?: boolean; downloadBaseUrl?: string },
+) {
+  const normalizedSourceUrl = sourceUrl.trim() || DEFAULT_PLAYLIST_URL
+  const normalizedDownloadBaseUrl = (options?.downloadBaseUrl || DEFAULT_DOWNLOAD_BASE_URL).trim()
+
   if (!options?.force) {
-    const cached = readCache(identifier)
+    const cached = readCache(normalizedSourceUrl)
     if (cached) {
       return cached
     }
   }
 
-  const response = await fetch(`${BASE_URL}/${encodeURIComponent(identifier)}`)
+  const response = await fetch(normalizedSourceUrl)
   if (!response.ok) {
-    throw new Error(`Archive request failed with status ${response.status}.`)
+    throw new Error(`Playlist request failed with status ${response.status}.`)
   }
 
-  const data = (await response.json()) as ArchiveMetadataResponse
-  if (!data.server || !data.dir || !Array.isArray(data.files)) {
-    throw new Error('Archive response is missing required metadata fields.')
+  const data = (await response.json()) as PlaylistResponse
+  if (!Array.isArray(data.entries)) {
+    throw new Error('Playlist response is missing entries.')
   }
 
-  const audios = data.files
-    .filter((file) => file.format === 'VBR MP3')
-    .map((file) => mapArchiveAudio(identifier, data, file))
+  const audios = data.entries
+    .map((entry) => mapPlaylistEntry(data, entry, normalizedDownloadBaseUrl))
+    .filter((entry): entry is ArchiveAudio => Boolean(entry))
     .sort((left, right) => right.mtime - left.mtime)
 
-  writeCache(identifier, audios)
+  writeCache(normalizedSourceUrl, audios)
   return audios
+}
+
+export const archivePlaylistConfig = {
+  sourceUrl: DEFAULT_PLAYLIST_URL,
+  downloadBaseUrl: DEFAULT_DOWNLOAD_BASE_URL,
 }

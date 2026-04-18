@@ -26,6 +26,10 @@ function shuffleArray<T>(items: T[]) {
   return nextItems
 }
 
+function sortAudiosByNewest(items: ArchiveAudio[]) {
+  return [...items].sort((left, right) => right.mtime - left.mtime)
+}
+
 export const usePlayerStore = defineStore('player', () => {
   const audios = ref<ArchiveAudio[]>([])
   const currentIndex = ref(-1)
@@ -148,10 +152,13 @@ export const usePlayerStore = defineStore('player', () => {
     })
   }
 
-  async function loadAudios(nextIdentifier: string, options?: { force?: boolean }) {
+  async function loadAudios(
+    nextIdentifier: string,
+    options?: { force?: boolean; downloadBaseUrl?: string },
+  ) {
     const normalizedIdentifier = nextIdentifier.trim()
     if (!normalizedIdentifier) {
-      error.value = 'Archive identifier is required.'
+      error.value = 'Playlist source URL is required.'
       audios.value = []
       currentIndex.value = -1
       return
@@ -161,7 +168,7 @@ export const usePlayerStore = defineStore('player', () => {
     error.value = ''
 
     try {
-      const tracks = await fetchArchiveAudios(normalizedIdentifier, options)
+      const tracks = sortAudiosByNewest(await fetchArchiveAudios(normalizedIdentifier, options))
       audios.value = tracks
       identifier.value = normalizedIdentifier
       writeLastIdentifier(normalizedIdentifier)
@@ -179,7 +186,9 @@ export const usePlayerStore = defineStore('player', () => {
       }
 
       shuffle.value = false
-      if (currentIndex.value < 0 || currentIndex.value >= tracks.length) {
+      if (options?.force) {
+        currentIndex.value = 0
+      } else if (currentIndex.value < 0 || currentIndex.value >= tracks.length) {
         currentIndex.value = 0
       }
       writeSnapshot()

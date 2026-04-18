@@ -3,6 +3,7 @@ import type { ArchiveAudio } from '@/services/audioApi'
 const LAST_IDENTIFIER_KEY = 'archive-player:last-identifier'
 const PLAY_COUNTS_KEY = 'archive-player:play-counts'
 const PLAYER_SNAPSHOT_KEY = 'archive-player:snapshot'
+const HOME_VIEW_STATE_KEY = 'archive-player:home-view-state'
 
 export interface PlayerSnapshot {
   audios: ArchiveAudio[]
@@ -13,6 +14,14 @@ export interface PlayerSnapshot {
   shuffle: boolean
   identifier: string
   playCounts: Record<string, number>
+}
+
+export interface HomeViewState {
+  query: string
+  selectedSort: string
+  sortMenuOpen: boolean
+  timerValue: string
+  timerDeadline: number | null
 }
 
 export function readPlayCounts() {
@@ -63,6 +72,30 @@ export function readPlayerSnapshot() {
 
 export function writePlayerSnapshot(snapshot: PlayerSnapshot) {
   localStorage.setItem(PLAYER_SNAPSHOT_KEY, JSON.stringify(snapshot))
+}
+
+export function readHomeViewState() {
+  const raw = localStorage.getItem(HOME_VIEW_STATE_KEY)
+  if (!raw) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<HomeViewState>
+    return {
+      query: typeof parsed.query === 'string' ? parsed.query : '',
+      selectedSort: typeof parsed.selectedSort === 'string' ? parsed.selectedSort : 'newest',
+      sortMenuOpen: Boolean(parsed.sortMenuOpen),
+      timerValue: typeof parsed.timerValue === 'string' ? parsed.timerValue : '06:00',
+      timerDeadline: Number.isFinite(parsed.timerDeadline) ? Number(parsed.timerDeadline) : null,
+    } satisfies HomeViewState
+  } catch {
+    return null
+  }
+}
+
+export function writeHomeViewState(state: HomeViewState) {
+  localStorage.setItem(HOME_VIEW_STATE_KEY, JSON.stringify(state))
 }
 
 export function readLastIdentifier() {
