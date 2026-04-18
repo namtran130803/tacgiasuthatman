@@ -32,6 +32,7 @@ function sortAudiosByNewest(items: ArchiveAudio[]) {
 
 export const usePlayerStore = defineStore('player', () => {
   const audios = ref<ArchiveAudio[]>([])
+  const playbackQueue = ref<string[]>([])
   const currentIndex = ref(-1)
   const currentTime = ref(0)
   const playing = ref(false)
@@ -59,6 +60,33 @@ export const usePlayerStore = defineStore('player', () => {
   let progressTimer: number | null = null
 
   const currentAudio = computed(() => audios.value[currentIndex.value] ?? null)
+
+  function getEffectiveQueue() {
+    if (playbackQueue.value.length === 0) {
+      return audios.value.map((track) => track.id)
+    }
+
+    return playbackQueue.value.filter((trackId) => audios.value.some((track) => track.id === trackId))
+  }
+
+  function resolveQueueTargetIndex(direction: 1 | -1) {
+    const queue = getEffectiveQueue()
+    if (queue.length === 0) {
+      return -1
+    }
+
+    const currentId = currentAudio.value?.id
+    const activeQueueIndex = currentId ? queue.findIndex((trackId) => trackId === currentId) : -1
+    const targetQueueIndex =
+      activeQueueIndex >= 0
+        ? (activeQueueIndex + direction + queue.length) % queue.length
+        : direction === 1
+          ? 0
+          : queue.length - 1
+
+    const targetId = queue[targetQueueIndex]
+    return audios.value.findIndex((track) => track.id === targetId)
+  }
 
   function stopProgressTimer() {
     if (progressTimer !== null) {
@@ -105,13 +133,16 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   function preloadNextTrack(baseIndex = currentIndex.value) {
-    if (audios.value.length < 2) {
+    const queue = getEffectiveQueue()
+    if (queue.length < 2) {
       return
     }
 
-    const normalizedBaseIndex = baseIndex >= 0 ? baseIndex : 0
-    const nextIndex = (normalizedBaseIndex + 1) % audios.value.length
-    const nextTrack = audios.value[nextIndex]
+    const baseTrack = audios.value[baseIndex >= 0 ? baseIndex : 0]
+    const baseQueueIndex = baseTrack ? queue.findIndex((trackId) => trackId === baseTrack.id) : -1
+    const nextQueueIndex = baseQueueIndex >= 0 ? (baseQueueIndex + 1) % queue.length : 0
+    const nextTrackId = queue[nextQueueIndex]
+    const nextTrack = audios.value.find((track) => track.id === nextTrackId)
     if (!nextTrack) {
       return
     }
@@ -149,7 +180,7 @@ export const usePlayerStore = defineStore('player', () => {
         if (currentAudio.value) {
           incrementPlayCount(currentAudio.value.id)
         }
-        const nextIndex = resolveNextIndex(1)
+        const nextIndex = resolveQueueTargetIndex(1)
         if (nextIndex >= 0) {
           void playAt(nextIndex)
         }
@@ -186,6 +217,7 @@ export const usePlayerStore = defineStore('player', () => {
     try {
       const tracks = sortAudiosByNewest(await fetchArchiveAudios(normalizedIdentifier, options))
       audios.value = tracks
+      playbackQueue.value = tracks.map((track) => track.id)
       identifier.value = normalizedIdentifier
       writeLastIdentifier(normalizedIdentifier)
 
@@ -295,13 +327,29 @@ export const usePlayerStore = defineStore('player', () => {
     audioPlayer.pause()
   }
 
-  function resolveNextIndex(direction: 1 | -1) {
-    if (audios.value.length === 0) {
-      return -1
+  function setPlaybackQueue(trackIds: string[]) {
+    const availableIds = new Set(audios.value.map((track) => track.id))
+    const nextQueue = Array.from(new Set(trackIds)).filter((trackId) => availableIds.has(trackId))
+    playbackQueue.value = nextQueue.length > 0 ? nextQueue : audios.value.map((track) => track.id)
+    writeSnapshot()
+  }
+
+  async function playNextInQueue() {
+    const nextIndex = resolveQueueTargetIndex(1)
+    if (nextIndex < 0) {
+      return
     }
 
-    const baseIndex = currentIndex.value >= 0 ? currentIndex.value : 0
-    return (baseIndex + direction + audios.value.length) % audios.value.length
+    await playAt(nextIndex)
+  }
+
+  async function playPreviousInQueue() {
+    const previousIndex = resolveQueueTargetIndex(-1)
+    if (previousIndex < 0) {
+      return
+    }
+
+    await playAt(previousIndex)
   }
 
   async function shuffleAndPlay(trackIds?: string[]) {
@@ -363,9 +411,13 @@ export const usePlayerStore = defineStore('player', () => {
     playerState,
     playCounts,
     currentAudio,
+    playbackQueue,
     loadAudios,
     playAt,
+    playNextInQueue,
+    playPreviousInQueue,
     replayCurrent,
+    setPlaybackQueue,
     togglePlayback,
     pausePlayback,
     shuffleAndPlay,

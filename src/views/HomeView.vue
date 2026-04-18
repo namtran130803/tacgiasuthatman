@@ -154,6 +154,10 @@ function getPlaybackList() {
   return filteredAudios.value
 }
 
+function syncPlaybackQueue() {
+  player.setPlaybackQueue(filteredAudios.value.map((track) => track.id))
+}
+
 function updateClock() {
   currentClock.value = formatLocalClock()
 }
@@ -211,6 +215,7 @@ function toggleSortMenu() {
 }
 
 async function playFirstFromCurrentList() {
+  syncPlaybackQueue()
   const firstTrack = getPlaybackList()[0]
   if (!firstTrack) return
   const index = player.audios.findIndex((track) => track.id === firstTrack.id)
@@ -252,30 +257,21 @@ async function handleReload() {
 }
 
 async function handlePrev() {
-  const playbackList = getPlaybackList()
-  if (playbackList.length === 0) return
+  syncPlaybackQueue()
+  if (filteredAudios.value.length === 0) return
 
   if (player.currentTime > 3) {
     player.seekTo(0)
     return
   }
 
-  const activeIndex = playbackList.findIndex((track) => track.id === currentTrack.value?.id)
-  const previousIndex =
-    activeIndex >= 0
-      ? (activeIndex - 1 + playbackList.length) % playbackList.length
-      : playbackList.length - 1
-
-  await selectTrack(playbackList[previousIndex]!.id)
+  await player.playPreviousInQueue()
 }
 
 async function handleNext() {
-  const playbackList = getPlaybackList()
-  if (playbackList.length === 0) return
-
-  const activeIndex = playbackList.findIndex((track) => track.id === currentTrack.value?.id)
-  const nextIndex = activeIndex >= 0 ? (activeIndex + 1) % playbackList.length : 0
-  await selectTrack(playbackList[nextIndex]!.id)
+  syncPlaybackQueue()
+  if (filteredAudios.value.length === 0) return
+  await player.playNextInQueue()
 }
 
 async function handleShuffle() {
@@ -327,12 +323,19 @@ watch(
     if (next === prev) return
     writeViewState()
     if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
+    else syncPlaybackQueue()
   },
 )
 
 watch(
   () => timerValue.value,
   () => writeViewState(),
+)
+
+watch(
+  () => filteredAudios.value.map((track) => track.id).join('|'),
+  () => syncPlaybackQueue(),
+  { immediate: true },
 )
 
 watch(
