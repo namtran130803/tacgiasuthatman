@@ -13,6 +13,7 @@ import {
 } from '@/lib/playerSnapshot'
 
 type PlayerState = 'idle' | 'playing' | 'paused' | 'buffering' | 'error'
+type NextTrackState = 'idle' | 'loading' | 'ready' | 'error'
 
 function shuffleArray<T>(items: T[]) {
   const nextItems = [...items]
@@ -44,6 +45,7 @@ export const usePlayerStore = defineStore('player', () => {
   const playerState = ref<PlayerState>('idle')
   const playCounts = ref<Record<string, number>>(readStoredPlayCounts())
   const snapshot = readPlayerSnapshot()
+  const nextTrackState = ref<NextTrackState>('idle')
 
   if (snapshot) {
     audios.value = snapshot.audios
@@ -58,8 +60,29 @@ export const usePlayerStore = defineStore('player', () => {
   }
 
   let progressTimer: number | null = null
+  
+  // Event handlers for audio element
+  let onAudioPlay: (() => void) | null = null
+  let onAudioPause: (() => void) | null = null
+  let onAudioEnded: (() => void) | null = null
 
   const currentAudio = computed(() => audios.value[currentIndex.value] ?? null)
+
+  const nextAudio = computed(() => {
+    const queue = getEffectiveQueue()
+    if (queue.length < 2 || !currentAudio.value) {
+      return null
+    }
+
+    const currentQueueIndex = queue.findIndex((trackId) => trackId === currentAudio.value?.id)
+    if (currentQueueIndex < 0) {
+      return null
+    }
+
+    const nextQueueIndex = (currentQueueIndex + 1) % queue.length
+    const nextTrackId = queue[nextQueueIndex]
+    return audios.value.find((track) => track.id === nextTrackId) ?? null
+  })
 
   function getEffectiveQueue() {
     if (playbackQueue.value.length === 0) {
@@ -147,13 +170,16 @@ export const usePlayerStore = defineStore('player', () => {
     if (!nextTrack) {
       return
     }
+    
+    nextTrackState.value = 'loading'
     audioPlayer.preload(nextTrack)
   }
 
   function bindPlayerEvents() {
     const audio = audioPlayer.getAudio()
 
-    audio.addEventListener('play', () => {
+    // Create event handlers and store them for later reuse
+    onAudioPlay = () => {
       playing.value = true
       playerState.value = 'playing'
       error.value = ''
@@ -163,18 +189,19 @@ export const usePlayerStore = defineStore('player', () => {
       console.log('Started playing:', currentAudio.value)
       preloadNextTrack()
       writeSnapshot()
-    })
+    }
 
-    audio.addEventListener('pause', () => {
+    onAudioPause = () => {
       playing.value = false
       playerState.value = currentAudio.value ? 'paused' : 'idle'
       syncProgress()
       stopProgressTimer()
       writeSnapshot()
-    })
+    }
 
-    audio.addEventListener('ended', () => {
+    onAudioEnded = () => {
       stopProgressTimer()
+      nextTrackState.value = 'idle'
       if (currentAudio.value) {
         incrementPlayCount(currentAudio.value.id)
       }
@@ -182,8 +209,12 @@ export const usePlayerStore = defineStore('player', () => {
       if (nextIndex >= 0) {
         void playAt(nextIndex)
       }
-    })
+    }
 
+    // Attach event listeners
+    audio.addEventListener('play', onAudioPlay)
+    audio.addEventListener('pause', onAudioPause)
+    audio.addEventListener('ended', onAudioEnded)
     audio.addEventListener('timeupdate', syncProgress)
     audio.addEventListener('seeked', syncProgress)
 
@@ -191,14 +222,38 @@ export const usePlayerStore = defineStore('player', () => {
       onLoad: () => {
         duration.value = audioPlayer.getDuration()
       },
+      onPreloadStart: () => {
+        nextTrackState.value = 'loading'
+      },
+      onPreloadReady: () => {
+        nextTrackState.value = 'ready'
+      },
+      onAudioSwapped: () => {
+        rebindPlayerEvents()
+      },
       onError: (message) => {
         error.value = message
         playing.value = false
         playerState.value = 'error'
+        nextTrackState.value = 'idle'
         stopProgressTimer()
         writeSnapshot()
       },
     })
+  }
+
+  function rebindPlayerEvents() {
+    const audio = audioPlayer.getAudio()
+    
+    // Detach handlers from old audio (if they were set)
+    // We can't detach from old element as reference is lost, so just attach to new one
+    
+    if (onAudioPlay) audio.addEventListener('play', onAudioPlay)
+    if (onAudioPause) audio.addEventListener('pause', onAudioPause)
+    if (onAudioEnded) audio.addEventListener('ended', onAudioEnded)
+    
+    audio.addEventListener('timeupdate', syncProgress)
+    audio.addEventListener('seeked', syncProgress)
   }
 
   async function loadAudios(
@@ -278,7 +333,11 @@ export const usePlayerStore = defineStore('player', () => {
     if (startAt > 0) {
       audioPlayer.seek(startAt)
     }
+    
     audioPlayer.play()
+    // Set playing state immediately after play() call
+    playing.value = true
+    playerState.value = 'playing'
   }
 
   async function playAt(index: number, options?: { startAt?: number }) {
@@ -312,6 +371,9 @@ export const usePlayerStore = defineStore('player', () => {
     playerState.value = 'buffering'
     writeSnapshot()
     audioPlayer.play()
+    // Set playing state immediately after play() call
+    playing.value = true
+    playerState.value = 'playing'
   }
 
   function togglePlayback() {
@@ -339,6 +401,9 @@ export const usePlayerStore = defineStore('player', () => {
     playerState.value = 'buffering'
     writeSnapshot()
     audioPlayer.play()
+    // Set playing state immediately after play() call
+    playing.value = true
+    playerState.value = 'playing'
   }
 
   function pausePlayback() {
@@ -406,6 +471,8 @@ export const usePlayerStore = defineStore('player', () => {
     playerState,
     playCounts,
     currentAudio,
+    nextAudio,
+    nextTrackState,
     playbackQueue,
     loadAudios,
     playAt,

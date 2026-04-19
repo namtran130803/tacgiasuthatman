@@ -81,6 +81,14 @@ const filteredAudios = computed(() => {
 })
 
 const currentTrack = computed(() => player.currentAudio)
+const nextTrack = computed(() => player.nextAudio)
+const nextTrackStatusLabel = computed(() => {
+  const state = player.nextTrackState
+  if (state === 'loading') return 'Đang tải bài tiếp theo...'
+  if (state === 'ready') return 'Bài tiếp theo sẵn sàng'
+  if (state === 'error') return 'Lỗi tải bài tiếp theo'
+  return ''
+})
 const trackPositionLabel = computed(() => {
   if (!currentTrack.value) return `0/${filteredAudios.value.length || player.audios.length}`
   const i = filteredAudios.value.findIndex((t) => t.id === currentTrack.value?.id)
@@ -396,13 +404,25 @@ onUnmounted(() => {
                 @click="selectTrack(track.id)"
               >
                 <div class="flex w-full flex-col gap-1.5">
-                  <!-- Title -->
-                  <p
-                    class="truncate text-[13.5px] font-semibold leading-snug"
-                    :style="track.id === currentTrack?.id ? 'color: var(--c-primary-soft)' : 'color: var(--c-text-secondary)'"
-                  >
-                    {{ track.title }}
-                  </p>
+                  <!-- Title with next track state -->
+                  <div class="flex items-center justify-between gap-2">
+                    <p
+                      class="truncate text-[13.5px] font-semibold leading-snug"
+                      :style="track.id === currentTrack?.id ? 'color: var(--c-primary-soft)' : 'color: var(--c-text-secondary)'"
+                    >
+                      {{ track.title }}
+                    </p>
+                    <!-- Next track state indicator -->
+                    <div v-if="track.id === nextTrack?.id && player.nextTrackState !== 'idle'" class="shrink-0">
+                      <span v-if="player.nextTrackState === 'loading'" class="inline-flex items-center gap-1 rounded-full bg-(--c-primary-tint) px-2 py-1 text-[10px] font-medium text-(--c-primary-mid)">
+                        <Loader2 class="h-2.5 w-2.5 animate-spin" />
+                        <span>Đang tải</span>
+                      </span>
+                      <span v-else-if="player.nextTrackState === 'ready'" class="inline-flex items-center gap-1 rounded-full bg-(--c-primary-tint) px-2 py-1 text-[10px] font-medium text-(--c-primary)">
+                        ✓ Sẵn sàng
+                      </span>
+                    </div>
+                  </div>
 
                   <!-- Stats row -->
                   <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
