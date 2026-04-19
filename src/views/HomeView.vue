@@ -18,8 +18,8 @@ import {
   SkipForward,
 } from '@lucide/vue'
 
-import { RecycleScroller } from 'vue-virtual-scroller' // ← Thêm import này
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css' // ← Import CSS (nên import 1 lần trong main.ts hoặc App.vue)
+import { RecycleScroller } from 'vue-virtual-scroller'
+import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 
 import { archivePlaylistConfig } from '@/services/audioApi'
 import { readHomeViewState, writeHomeViewState } from '@/lib/playerSnapshot'
@@ -42,7 +42,7 @@ const player = usePlayerStore()
 
 const query = ref(homeViewState?.query || '')
 const currentClock = ref('')
-const scroller = ref<any>(null) // ref cho RecycleScroller
+const scroller = ref<any>(null)
 const sortMenuRef = ref<HTMLElement | null>(null)
 const timerInput = ref<HTMLInputElement | null>(null)
 const timerValue = ref(homeViewState?.timerValue || '06:00')
@@ -64,34 +64,13 @@ const sortGroups: Array<{
   desc: TrackSortOption
   asc: TrackSortOption
 }> = [
-  { key: 'date', label: 'Ngày đăng', shortLabel: 'Ngày đăng', icon: Clock3, desc: 'newest', asc: 'oldest' },
-  { key: 'play', label: 'Lượt phát', shortLabel: 'Phát', icon: Play, desc: 'play_desc', asc: 'play_asc' },
-  {
-    key: 'view',
-    label: 'Lượt nghe',
-    shortLabel: 'Nghe',
-    icon: Headphones,
-    desc: 'view_desc',
-    asc: 'view_asc',
-  },
-  { key: 'like', label: 'Lượt thích', shortLabel: 'Thích', icon: Heart, desc: 'like_desc', asc: 'like_asc' },
-  {
-    key: 'repost',
-    label: 'Đăng lại',
-    shortLabel: 'Đăng lại',
-    icon: Repeat2,
-    desc: 'repost_desc',
-    asc: 'repost_asc',
-  },
-  {
-    key: 'comment',
-    label: 'Bình luận',
-    shortLabel: 'Bình luận',
-    icon: MessageCircle,
-    desc: 'comment_desc',
-    asc: 'comment_asc',
-  },
-  { key: 'save', label: 'Lưu', shortLabel: 'Lưu', icon: Bookmark, desc: 'save_desc', asc: 'save_asc' },
+  { key: 'date',    label: 'Ngày đăng', shortLabel: 'Ngày đăng', icon: Clock3,         desc: 'newest',      asc: 'oldest'     },
+  { key: 'play',    label: 'Lượt phát', shortLabel: 'Phát',      icon: Play,           desc: 'play_desc',   asc: 'play_asc'   },
+  { key: 'view',    label: 'Lượt nghe', shortLabel: 'Nghe',      icon: Headphones,     desc: 'view_desc',   asc: 'view_asc'   },
+  { key: 'like',    label: 'Lượt thích',shortLabel: 'Thích',     icon: Heart,          desc: 'like_desc',   asc: 'like_asc'   },
+  { key: 'repost',  label: 'Đăng lại',  shortLabel: 'Đăng lại',  icon: Repeat2,        desc: 'repost_desc', asc: 'repost_asc' },
+  { key: 'comment', label: 'Bình luận', shortLabel: 'Bình luận', icon: MessageCircle,  desc: 'comment_desc',asc: 'comment_asc'},
+  { key: 'save',    label: 'Lưu',       shortLabel: 'Lưu',       icon: Bookmark,       desc: 'save_desc',   asc: 'save_asc'   },
 ]
 
 const filteredAudios = computed(() => {
@@ -102,36 +81,21 @@ const filteredAudios = computed(() => {
 const currentTrack = computed(() => player.currentAudio)
 const trackPositionLabel = computed(() => {
   if (!currentTrack.value) return `0/${filteredAudios.value.length || player.audios.length}`
-
-  const activeIndex = filteredAudios.value.findIndex((track) => track.id === currentTrack.value?.id)
-  if (activeIndex < 0) {
-    return `0/${filteredAudios.value.length || player.audios.length}`
-  }
-
-  return `${activeIndex + 1}/${filteredAudios.value.length}`
+  const i = filteredAudios.value.findIndex((t) => t.id === currentTrack.value?.id)
+  if (i < 0) return `0/${filteredAudios.value.length || player.audios.length}`
+  return `${i + 1}/${filteredAudios.value.length}`
 })
 
 const displayDuration = computed(() => player.duration || currentTrack.value?.durationHint || 0)
 const buffering = computed(() => player.playerState === 'buffering')
 const selectedSortGroup = computed(() =>
-  sortGroups.find((option) => option.desc === selectedSort.value || option.asc === selectedSort.value),
+  sortGroups.find((g) => g.desc === selectedSort.value || g.asc === selectedSort.value),
 )
-const selectedSortLabel = computed(() => {
-  const group = selectedSortGroup.value
-  if (!group) {
-    return 'Sắp xếp'
-  }
-
-  return group.label
-})
+const selectedSortLabel      = computed(() => selectedSortGroup.value?.label     || 'Sắp xếp')
 const selectedSortShortLabel = computed(() => selectedSortGroup.value?.shortLabel || 'Sắp xếp')
 const selectedSortIsAscending = computed(() => {
-  const group = selectedSortGroup.value
-  if (!group) {
-    return false
-  }
-
-  return selectedSort.value === group.asc
+  const g = selectedSortGroup.value
+  return g ? selectedSort.value === g.asc : false
 })
 
 const {
@@ -150,194 +114,107 @@ const displayedCurrentTime = computed(() =>
   isSeekDragging.value ? seekSliderPreviewValue.value : player.currentTime,
 )
 
-function getPlaybackList() {
-  return filteredAudios.value
-}
-
-function syncPlaybackQueue() {
-  player.setPlaybackQueue(filteredAudios.value.map((track) => track.id))
-}
-
-function updateClock() {
-  currentClock.value = formatLocalClock()
-}
-
+function getPlaybackList() { return filteredAudios.value }
+function syncPlaybackQueue() { player.setPlaybackQueue(filteredAudios.value.map((t) => t.id)) }
+function updateClock() { currentClock.value = formatLocalClock() }
 function updateTimerCountdown() {
-  if (!timerDeadline.value) {
-    timerCountdown.value = ''
-    return
-  }
+  if (!timerDeadline.value) { timerCountdown.value = ''; return }
   timerCountdown.value = formatCountdown(Math.max(0, timerDeadline.value - Date.now()))
 }
-
 function writeViewState() {
   writeHomeViewState({
-    query: query.value,
-    selectedSort: selectedSort.value,
-    sortMenuOpen: sortMenuOpen.value,
-    timerValue: timerValue.value,
-    timerDeadline: timerDeadline.value,
+    query: query.value, selectedSort: selectedSort.value, sortMenuOpen: sortMenuOpen.value,
+    timerValue: timerValue.value, timerDeadline: timerDeadline.value,
   })
 }
-
 function clearSleepTimer() {
-  if (timerInterval !== null) {
-    window.clearInterval(timerInterval)
-    timerInterval = null
-  }
-  if (timerTimeout !== null) {
-    window.clearTimeout(timerTimeout)
-    timerTimeout = null
-  }
+  if (timerInterval !== null) { window.clearInterval(timerInterval); timerInterval = null }
+  if (timerTimeout  !== null) { window.clearTimeout(timerTimeout);   timerTimeout  = null }
   timerDeadline.value = null
   timerCountdown.value = ''
   writeViewState()
 }
-
 function openTimerPicker() {
   if (!timerInput.value) return
-  if ('showPicker' in HTMLInputElement.prototype) {
-    timerInput.value.showPicker()
-    return
-  }
-  timerInput.value.focus()
-  timerInput.value.click()
+  if ('showPicker' in HTMLInputElement.prototype) { timerInput.value.showPicker(); return }
+  timerInput.value.focus(); timerInput.value.click()
 }
-
-function closeSortMenu() {
-  sortMenuOpen.value = false
-  writeViewState()
-}
-
-function toggleSortMenu() {
-  sortMenuOpen.value = !sortMenuOpen.value
-  writeViewState()
-}
+function closeSortMenu()  { sortMenuOpen.value = false; writeViewState() }
+function toggleSortMenu() { sortMenuOpen.value = !sortMenuOpen.value; writeViewState() }
 
 async function playFirstFromCurrentList() {
   syncPlaybackQueue()
-  const firstTrack = getPlaybackList()[0]
-  if (!firstTrack) return
-  const index = player.audios.findIndex((track) => track.id === firstTrack.id)
-  if (index >= 0) await player.playAt(index)
+  const first = getPlaybackList()[0]
+  if (!first) return
+  const idx = player.audios.findIndex((t) => t.id === first.id)
+  if (idx >= 0) await player.playAt(idx)
 }
-
 async function handlePrimaryAction() {
   if (!timerValue.value) return
   clearSleepTimer()
-
   const now = new Date()
-  const targetDate = createDeadlineFromTime(timerValue.value, now)
-  if (!targetDate) return
-
-  timerDeadline.value = targetDate.getTime()
+  const target = createDeadlineFromTime(timerValue.value, now)
+  if (!target) return
+  timerDeadline.value = target.getTime()
   updateTimerCountdown()
   timerInterval = window.setInterval(updateTimerCountdown, 1000)
-  timerTimeout = window.setTimeout(() => {
-    player.pausePlayback()
-    clearSleepTimer()
-  }, timerDeadline.value - now.getTime())
+  timerTimeout  = window.setTimeout(() => { player.pausePlayback(); clearSleepTimer() }, timerDeadline.value - now.getTime())
   writeViewState()
 }
-
 async function selectTrack(trackId: string) {
-  const index = player.audios.findIndex((track) => track.id === trackId)
-  if (index < 0) return
-  if (index === player.currentIndex) {
-    player.togglePlayback()
-    return
-  }
-  await player.playAt(index)
+  const idx = player.audios.findIndex((t) => t.id === trackId)
+  if (idx < 0) return
+  if (idx === player.currentIndex) { player.togglePlayback(); return }
+  await player.playAt(idx)
 }
-
 async function handleReload() {
   await player.loadAudios(PLAYLIST_SOURCE_URL, { force: true, downloadBaseUrl: DOWNLOAD_BASE_URL })
-  await nextTick()
-  await playFirstFromCurrentList()
+  await nextTick(); await playFirstFromCurrentList()
 }
-
 async function handlePrev() {
   syncPlaybackQueue()
-  if (filteredAudios.value.length === 0) return
-
-  if (player.currentTime > 3) {
-    player.seekTo(0)
-    return
-  }
-
+  if (!filteredAudios.value.length) return
+  if (player.currentTime > 3) { player.seekTo(0); return }
   await player.playPreviousInQueue()
 }
-
 async function handleNext() {
   syncPlaybackQueue()
-  if (filteredAudios.value.length === 0) return
+  if (!filteredAudios.value.length) return
   await player.playNextInQueue()
 }
-
 async function handleShuffle() {
-  const playbackList = getPlaybackList()
-  await player.shuffleAndPlay(playbackList.map((track) => track.id))
+  await player.shuffleAndPlay(getPlaybackList().map((t) => t.id))
 }
-
 async function handleTogglePlayback() {
-  player.togglePlayback()
-  await scrollActiveTrackIntoView()
+  player.togglePlayback(); await scrollActiveTrackIntoView()
 }
-
-async function applySort(nextSort: TrackSortOption) {
-  selectedSort.value = nextSort
-  writeViewState()
-  await playFirstFromCurrentList()
+async function applySort(next: TrackSortOption) {
+  selectedSort.value = next; writeViewState(); await playFirstFromCurrentList()
 }
-
 async function toggleSortGroup(desc: TrackSortOption, asc: TrackSortOption) {
   await applySort(selectedSort.value === desc ? asc : desc)
 }
-
-function handleWindowPointerDown(event: PointerEvent) {
-  if (!sortMenuOpen.value || !sortMenuRef.value) {
-    return
-  }
-
-  const target = event.target
-  if (target instanceof Node && !sortMenuRef.value.contains(target)) {
-    closeSortMenu()
-  }
+function handleWindowPointerDown(e: PointerEvent) {
+  if (!sortMenuOpen.value || !sortMenuRef.value) return
+  const t = e.target
+  if (t instanceof Node && !sortMenuRef.value.contains(t)) closeSortMenu()
 }
-
-// Cập nhật hàm scroll để dùng API của RecycleScroller
 async function scrollActiveTrackIntoView() {
   await nextTick()
   if (!scroller.value || !currentTrack.value) return
-
-  const index = filteredAudios.value.findIndex((track) => track.id === currentTrack.value!.id)
-  if (index < 0) return
-
-  // scrollToItem sẽ đưa item vào viewport (thường align top, đủ mượt mà trên mobile)
-  scroller.value.scrollToItem(index - 1)
+  const i = filteredAudios.value.findIndex((t) => t.id === currentTrack.value!.id)
+  if (i < 0) return
+  scroller.value.scrollToItem(i - 1)
 }
 
-watch(
-  () => query.value,
-  async (next, prev) => {
-    if (next === prev) return
-    writeViewState()
-    if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
-    else syncPlaybackQueue()
-  },
-)
-
-watch(
-  () => timerValue.value,
-  () => writeViewState(),
-)
-
-watch(
-  () => filteredAudios.value.map((track) => track.id).join('|'),
-  () => syncPlaybackQueue(),
-  { immediate: true },
-)
-
+watch(() => query.value, async (next, prev) => {
+  if (next === prev) return
+  writeViewState()
+  if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
+  else syncPlaybackQueue()
+})
+watch(() => timerValue.value, () => writeViewState())
+watch(() => filteredAudios.value.map((t) => t.id).join('|'), () => syncPlaybackQueue(), { immediate: true })
 watch(
   () => [player.currentIndex, filteredAudios.value.map((t) => t.id).join('|')],
   async () => await scrollActiveTrackIntoView(),
@@ -347,32 +224,21 @@ onMounted(async () => {
   updateClock()
   clockInterval = window.setInterval(updateClock, 30000)
   window.addEventListener('pointerdown', handleWindowPointerDown)
-
   if (timerDeadline.value) {
     const remaining = timerDeadline.value - Date.now()
     if (remaining > 0) {
       updateTimerCountdown()
       timerInterval = window.setInterval(updateTimerCountdown, 1000)
-      timerTimeout = window.setTimeout(() => {
-        player.pausePlayback()
-        clearSleepTimer()
-      }, remaining)
-    } else {
-      clearSleepTimer()
-    }
+      timerTimeout  = window.setTimeout(() => { player.pausePlayback(); clearSleepTimer() }, remaining)
+    } else { clearSleepTimer() }
   }
-
   writeViewState()
-
   if (player.identifier === PLAYLIST_SOURCE_URL && player.audios.length > 0) {
-    await scrollActiveTrackIntoView()
-    return
+    await scrollActiveTrackIntoView(); return
   }
-
   await player.loadAudios(PLAYLIST_SOURCE_URL, { downloadBaseUrl: DOWNLOAD_BASE_URL })
   await scrollActiveTrackIntoView()
 })
-
 onUnmounted(() => {
   if (clockInterval) window.clearInterval(clockInterval)
   window.removeEventListener('pointerdown', handleWindowPointerDown)
@@ -382,32 +248,42 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="h-svh w-svw bg-[#050505] text-white px-3">
-    <main class="flex h-full w-full flex-col">
-      <!-- HEADER -->
-      <div class="sticky top-0 z-10 shrink-0 bg-[#050505]">
-        <!-- Timer -->
-        <section class="border-b border-white/10 py-3">
-          <div class="flex items-center justify-between gap-3">
-            <span class="text-base font-medium text-white/90">Hẹn giờ ngủ</span>
+  <!-- ────────────────────────────────────────────────────────── ROOT -->
+  <div class="root relative h-svh w-svw overflow-hidden text-(--c-text)">
+    <main class="relative z-10 flex h-full flex-col px-3.5">
+
+      <!-- ──────────────────────── HEADER -->
+      <header class="shrink-0">
+
+        <!-- Sleep Timer -->
+        <section class="border-b border-(--c-divider) py-3.5">
+          <p class="mb-2.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-(--c-label-muted)">
+            <Clock3 class="h-2.5 w-2.5" /> Hẹn giờ ngủ
+          </p>
+          <div class="flex items-center gap-2.5">
+
+            <!-- Time display button -->
             <button
               type="button"
-              class="flex flex-1 h-10 items-center gap-3 rounded-3xl border border-white/10 bg-[#111113] px-4 text-base font-semibold shadow-inner active:scale-[0.97]"
+              class="timer-display flex h-11 flex-1 items-center justify-between rounded-2xl border border-(--c-border) bg-(--c-surface) px-4"
               @click="openTimerPicker"
             >
-              <Clock3 class="h-5 w-5 text-emerald-400" />
-              <span class="tabular-nums">
+              <span class="text-[22px] font-bold tabular-nums text-(--c-primary)">
                 {{ timerDeadline ? timerCountdown : formatSelectedTime(timerValue, currentClock) }}
               </span>
+              <span
+                v-if="timerDeadline"
+                class="h-2 w-2 rounded-full"
+                style="background: var(--c-primary)"
+              />
             </button>
             <input ref="timerInput" v-model="timerValue" type="time" class="sr-only" />
 
+            <!-- Start / Cancel -->
             <button
               type="button"
-              class="h-10 min-w-22 rounded-3xl px-2 text-base font-semibold active:scale-[0.97]"
-              :class="
-                timerDeadline ? 'bg-white/10 text-white hover:bg-white/20' : 'bg-white text-black'
-              "
+              class="h-11 min-w-22 rounded-2xl text-[13.5px] font-semibold"
+              :class="timerDeadline ? 'timer-btn-cancel' : 'timer-btn-start'"
               @click="timerDeadline ? clearSleepTimer() : handlePrimaryAction()"
             >
               {{ timerDeadline ? 'Hủy' : 'Bắt đầu' }}
@@ -416,187 +292,160 @@ onUnmounted(() => {
         </section>
 
         <!-- Search + Sort -->
-        <section class="py-3">
-          <div class="flex gap-2">
-            <div class="relative flex-1">
-              <Search
-                class="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-white/50"
-              />
-              <input
-                v-model="query"
-                type="text"
-                inputmode="search"
-                placeholder="Tìm kiếm..."
-                class="h-11 w-full rounded-3xl border border-white/10 bg-[#141417] pl-12 pr-5 text-[17px] text-white outline-none placeholder:text-white/50 focus:border-emerald-400/30"
-              />
-            </div>
+        <section class="flex gap-2.5 py-3">
+          <!-- Search input -->
+          <div class="relative flex-1">
+            <Search class="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-(--c-label-muted)" />
+            <input
+              v-model="query"
+              type="text"
+              inputmode="search"
+              placeholder="Tìm kiếm bài hát..."
+              class="search-input h-11 w-full rounded-2xl border border-(--c-border) bg-(--c-surface) pl-11 pr-4 text-[15px] text-(--c-text) outline-none placeholder:text-(--c-label-muted)"
+            />
+          </div>
 
-            <div ref="sortMenuRef" class="relative">
+          <!-- Sort -->
+          <div ref="sortMenuRef" class="relative">
+            <button
+              type="button"
+              class="sort-trigger flex h-11 items-center gap-1.5 rounded-2xl border border-(--c-border) bg-(--c-surface) px-3.5 text-[13px] font-medium text-(--c-label-secondary)"
+              :title="selectedSortLabel"
+              @click.stop="toggleSortMenu"
+            >
+              <component :is="selectedSortGroup?.icon || Clock3" class="h-3.5 w-3.5 shrink-0" />
+              <span class="whitespace-nowrap">{{ selectedSortShortLabel }}</span>
+              <ArrowUp   v-if="selectedSortIsAscending" class="size-4 opacity-50" />
+              <ArrowDown v-else                          class="size-4 opacity-50" />
+            </button>
+
+            <div
+              v-if="sortMenuOpen"
+              class="sort-menu absolute right-0 top-[calc(100%+8px)] z-30 min-w-44.5 rounded-2xl border border-(--c-border-strong) bg-(--c-bg-elevated) p-1.5"
+            >
               <button
+                v-for="group in sortGroups"
+                :key="group.key"
                 type="button"
-                class="flex h-11 items-center justify-center gap-2 rounded-3xl border border-white/10 bg-[#141417] px-4 text-sm font-medium text-white active:scale-95"
-                :title="selectedSortLabel"
-                @click.stop="toggleSortMenu"
+                class="sort-item flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.25 text-[13px]"
+                :class="selectedSort === group.desc || selectedSort === group.asc
+                  ? 'text-(--c-text)'
+                  : 'text-(--c-label-faint)'"
+                @click="toggleSortGroup(group.desc, group.asc)"
               >
-                <component :is="selectedSortGroup?.icon || Clock3" class="h-4 w-4" />
-                <span>{{ selectedSortShortLabel }}</span>
-                <ArrowUp v-if="selectedSortIsAscending" class="h-4 w-4" />
-                <ArrowDown v-else class="h-4 w-4" />
+                <span class="flex items-center gap-2 whitespace-nowrap">
+                  <component :is="group.icon" class="h-3.5 w-3.5" />
+                  {{ group.shortLabel }}
+                </span>
+                <span class="flex items-center gap-0.5">
+                  <ArrowDown class="size-4"
+                    :style="selectedSort === group.desc ? 'color: var(--c-primary)' : 'color: var(--c-label-faint)'" />
+                  <ArrowUp   class="size-4"
+                    :style="selectedSort === group.asc  ? 'color: var(--c-primary)' : 'color: var(--c-label-faint)'" />
+                </span>
               </button>
-
-              <div
-                v-if="sortMenuOpen"
-                class="absolute right-0 top-[calc(100%+8px)] z-20 overflow-hidden rounded-3xl border border-white/10 bg-[#141417] py-2 shadow-[0_16px_40px_rgba(0,0,0,0.45)]"
-              >
-                <button
-                  v-for="group in sortGroups"
-                  :key="group.key"
-                  type="button"
-                  class="flex w-full items-center justify-between gap-3 px-4 py-2 text-left text-sm transition hover:bg-white/10"
-                  :class="
-                    selectedSort === group.desc || selectedSort === group.asc
-                      ? 'text-white'
-                      : 'text-white/75'
-                  "
-                  @click="toggleSortGroup(group.desc, group.asc)"
-                >
-                  <span class="flex items-center gap-2 text-nowrap">
-                    <component :is="group.icon" class="h-4 w-4" />
-                    <span>{{ group.shortLabel }}</span>
-                  </span>
-                  <span class="flex items-center gap-1">
-                    <ArrowDown
-                      class="h-4 w-4"
-                      :class="selectedSort === group.desc ? 'text-white' : 'text-white/35'"
-                    />
-                    <ArrowUp
-                      class="h-4 w-4"
-                      :class="selectedSort === group.asc ? 'text-white' : 'text-white/35'"
-                    />
-                  </span>
-                </button>
-              </div>
             </div>
           </div>
         </section>
-      </div>
+      </header>
 
-      <!-- LIST - Sử dụng vue-virtual-scroller -->
-      <section class="flex-1 overflow-hidden bg-[#050505]">
-        <div v-if="player.loading && player.audios.length === 0" class="space-y-3">
-          <div v-for="n in 8" :key="n" class="h-16 animate-pulse rounded-3xl bg-white/5" />
+      <!-- ──────────────────────── TRACK LIST -->
+      <section class="min-h-0 flex-1 overflow-hidden">
+
+        <!-- Skeleton -->
+        <div v-if="player.loading && player.audios.length === 0" class="flex flex-col gap-1.5 pt-1">
+          <div
+            v-for="n in 7" :key="n"
+            class="h-20 rounded-2xl bg-(--c-surface)"
+          />
         </div>
 
+        <!-- Empty -->
         <div
           v-else-if="filteredAudios.length === 0"
-          class="flex h-full flex-col items-center justify-center text-center text-white/60"
+          class="flex h-full flex-col items-center justify-center gap-3 text-(--c-label-muted)"
         >
-          <p class="text-base">{{ player.error || 'Không tìm thấy bài hát nào' }}</p>
+          <Search class="h-8 w-8 opacity-40" />
+          <p class="text-[14px]">{{ player.error || 'Không tìm thấy bài hát nào' }}</p>
         </div>
 
-        <!-- RecycleScroller thay thế v-for thông thường -->
         <RecycleScroller
           v-else
           ref="scroller"
           :items="filteredAudios"
-          :item-size="92"
-          :key-field="'id'"
-          class="hide-scrollbar h-full pb-3"
+          :item-size="88"
+          key-field="id"
+          class="h-full [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
           <template #default="{ item: track }">
-            <button
-              :data-track-id="track.id"
-              type="button"
-              class="block w-full rounded-3xl p-3 text-left hover:bg-white/5 active:scale-[0.98]"
-              :class="{ 'bg-white/10 shadow-inner': track.id === currentTrack?.id }"
-              @click="selectTrack(track.id)"
-            >
-              <div class="flex flex-col gap-2">
-                <div class="flex justify-between">
+            <div class="py-1">
+              <button
+                :data-track-id="track.id"
+                type="button"
+                class="track-card relative flex h-20 w-full items-center overflow-hidden rounded-2xl border px-3.5 text-left"
+                :class="track.id === currentTrack?.id ? 'track-active' : 'track-idle'"
+                @click="selectTrack(track.id)"
+              >
+                <div class="flex w-full flex-col gap-1.5">
+                  <!-- Title -->
                   <p
-                    class="flex-1 font-medium line-clamp-1"
-                    :class="track.id === currentTrack?.id ? 'text-white' : 'text-white/90'"
+                    class="truncate text-[13.5px] font-semibold leading-snug"
+                    :style="track.id === currentTrack?.id ? 'color: var(--c-primary-soft)' : 'color: var(--c-text-secondary)'"
                   >
                     {{ track.title }}
                   </p>
 
-                  <div class="flex flex-wrap gap-2 text-sm">
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Lượt phát"
+                  <!-- Stats row -->
+                  <div class="flex flex-nowrap items-center gap-1.5 overflow-x-auto">
+                    <template
+                      v-for="stat in [
+                        { icon: Play,          val: player.playCounts[track.id] ?? 0, label: 'Lượt phát' },
+                        { icon: Headphones,    val: track.viewCount,                  label: 'Lượt nghe'  },
+                        { icon: Heart,         val: track.likeCount,                  label: 'Lượt thích' },
+                        { icon: Repeat2,       val: track.repostCount,                label: 'Đăng lại'   },
+                        { icon: MessageCircle, val: track.commentCount,               label: 'Bình luận'  },
+                        { icon: Bookmark,      val: track.saveCount,                  label: 'Lưu'        },
+                      ]"
+                      :key="stat.label"
                     >
-                      <Play class="h-3.5 w-3.5" />
-                      {{ (player.playCounts[track.id] ?? 0).toLocaleString('vi-VN') }}
-                    </span>
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Lượt nghe"
-                    >
-                      <Headphones class="h-3.5 w-3.5" />
-                      {{ track.viewCount.toLocaleString('vi-VN') }}
-                    </span>
+                      <span
+                        :aria-label="stat.label"
+                        class="stat-badge flex shrink-0 items-center gap-0.75 rounded-[7px] px-1.5 py-0.75 text-[10px] font-semibold tabular-nums"
+                        :class="track.id === currentTrack?.id ? 'stat-active' : 'stat-idle'"
+                      >
+                        <component :is="stat.icon" class="h-2.5 w-2.5 shrink-0" />
+                        {{ stat.val.toLocaleString('vi-VN') }}
+                      </span>
+                    </template>
                   </div>
                 </div>
-
-                <div class="space-y-2 text-sm text-white/50">
-                  <div class="flex flex-wrap gap-2 justify-end">
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Lượt thích"
-                    >
-                      <Heart class="h-3.5 w-3.5" />
-                      {{ track.likeCount.toLocaleString('vi-VN') }}
-                    </span>
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Đăng lại"
-                    >
-                      <Repeat2 class="h-3.5 w-3.5" />
-                      {{ track.repostCount.toLocaleString('vi-VN') }}
-                    </span>
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Bình luận"
-                    >
-                      <MessageCircle class="h-3.5 w-3.5" />
-                      {{ track.commentCount.toLocaleString('vi-VN') }}
-                    </span>
-                    <span
-                      class="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-1 tabular-nums"
-                      aria-label="Lưu"
-                    >
-                      <Bookmark class="h-3.5 w-3.5" />
-                      {{ track.saveCount.toLocaleString('vi-VN') }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </button>
+              </button>
+            </div>
           </template>
         </RecycleScroller>
       </section>
 
-      <!-- BOTTOM PLAYER (không thay đổi) -->
-      <section class="bg-[#050505]">
-        <div class="mx-auto border-t border-white/10 py-6 px-3 flex flex-col gap-3">
-          <!-- Info -->
-          <div class="text-center">
-            <p class="line-clamp-1 text-xl font-semibold tracking-tight text-white">
+      <!-- ──────────────────────── BOTTOM PLAYER -->
+      <section class="shrink-0">
+        <div class="border-t border-(--c-divider) px-1 pb-6 pt-4">
+
+          <!-- Track info -->
+          <div class="mb-3.5 text-center">
+            <p class="truncate text-[17px] font-bold tracking-tight text-(--c-text)">
               {{ currentTrack?.title || 'Chưa chọn bài hát' }}
             </p>
-            <p class="text-sm font-medium text-white/50 mt-1">
-              {{ trackPositionLabel }}
-            </p>
+            <p class="mt-1 text-[11px] font-medium text-(--c-label-muted)">{{ trackPositionLabel }}</p>
           </div>
 
-          <!-- Progress -->
-          <div class="flex items-center gap-3">
-            <span class="tabular-nums text-sm font-medium text-white/70">
+          <!-- Seek bar -->
+          <div class="mb-4 flex items-center gap-2.5">
+            <span class="w-8 text-right text-[11px] font-semibold tabular-nums text-(--c-label-muted)">
               {{ formatDuration(displayedCurrentTime) }}
             </span>
+
             <div
               ref="seekSliderTrackRef"
-              class="relative h-3 flex-1 cursor-pointer rounded-3xl bg-white/10 touch-none select-none"
+              class="seek-track relative h-0.75 flex-1 cursor-pointer touch-none select-none rounded-full"
               role="slider"
               :aria-valuemin="0"
               :aria-valuemax="displayDuration"
@@ -604,68 +453,181 @@ onUnmounted(() => {
               aria-label="Tua audio"
               @pointerdown="onSeekSliderPointerDown"
             >
-              <div class="absolute inset-0 rounded-3xl bg-white/10" />
               <div
-                class="absolute inset-y-0 left-0 rounded-3xl bg-linear-to-r from-emerald-300 to-white shadow-[0_0_12px_2px] shadow-emerald-300/60"
-                :class="isSeekDragging ? 'transition-none' : 'transition-all'"
+                class="seek-fill absolute inset-y-0 left-0 rounded-full"
                 :style="{ width: `${seekSliderProgress}%` }"
               />
+              <div
+                class="seek-thumb absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
+                :style="{ left: `${seekSliderProgress}%` }"
+              />
             </div>
-            <span class="tabular-nums text-sm font-medium text-white/70 text-right">
+
+            <span class="w-8 text-[11px] font-semibold tabular-nums text-(--c-label-muted)">
               {{ formatDuration(displayDuration) }}
             </span>
           </div>
 
-          <!-- Controls -->
+          <!-- Transport controls -->
           <div class="flex items-center justify-between">
+
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95 disabled:opacity-40"
+              class="ctrl-btn flex h-11 w-11 items-center justify-center rounded-2xl disabled:opacity-25"
               :disabled="player.loading"
               @click="handleReload"
             >
-              <RefreshCcw :class="{ 'animate-spin': player.loading }" class="h-7 w-7" />
+              <RefreshCcw class="h-5.5 w-5.5" />
             </button>
 
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              class="ctrl-btn flex h-11 w-11 items-center justify-center rounded-2xl"
               @click="handlePrev"
             >
-              <SkipBack class="h-7 w-7" />
+              <SkipBack class="h-5.5 w-5.5" />
             </button>
 
+            <!-- Play button -->
             <button
               type="button"
-              class="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-black shadow-[0_0_12px_2px] shadow-white/40 transition active:scale-95"
+              class="play-btn flex h-15.5 w-15.5 items-center justify-center rounded-[18px]"
               @click="handleTogglePlayback"
             >
               <div
                 v-if="buffering"
-                class="h-8 w-8 animate-spin rounded-full border-4 border-black/20 border-t-black"
+                class="h-6 w-6 rounded-full border-[3px] border-(--c-primary-ink)/25 border-t-(--c-primary-ink)"
               />
-              <Pause v-else-if="player.playing" class="h-10 w-10" />
-              <Play v-else class="ml-1 h-10 w-10" />
+              <Pause v-else-if="player.playing" class="h-6 w-6" />
+              <Play  v-else                      class="ml-0.5 h-6 w-6" />
             </button>
 
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              class="ctrl-btn flex h-11 w-11 items-center justify-center rounded-2xl"
               @click="handleNext"
             >
-              <SkipForward class="h-7 w-7" />
+              <SkipForward class="h-5.5 w-5.5" />
             </button>
 
             <button
               type="button"
-              class="flex h-11 w-11 items-center justify-center rounded-3xl text-white transition active:scale-95"
+              class="ctrl-btn flex h-11 w-11 items-center justify-center rounded-2xl"
               @click="handleShuffle"
             >
-              <Shuffle class="h-7 w-7" />
+              <Shuffle class="h-5.5 w-5.5" />
             </button>
+
           </div>
         </div>
       </section>
+
     </main>
   </div>
 </template>
+
+<style scoped>
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+   ═══════════════════════════════════════════════════════════════ */
+.root {
+  --c-bg:           #07080c;
+  --c-bg-elevated:  #0f1115;
+  --c-surface:      rgba(255,255,255,0.04);
+  --c-surface-hover:rgba(255,255,255,0.06);
+  --c-surface-press:rgba(255,255,255,0.07);
+
+  --c-text:           #e4e6ec;
+  --c-text-secondary: rgba(255,255,255,0.85);
+  --c-label-secondary:rgba(255,255,255,0.55);
+  --c-label-muted:    rgba(255,255,255,0.25);
+  --c-label-faint:    rgba(255,255,255,0.40);
+
+  --c-border:        rgba(255,255,255,0.08);
+  --c-border-strong: rgba(255,255,255,0.10);
+  --c-divider:       rgba(255,255,255,0.07);
+  --c-track-idle-border: rgba(255,255,255,0.06);
+
+  --c-primary:       #34d399;
+  --c-primary-soft:  #6ee7b7;
+  --c-primary-mid:   #10b981;
+  --c-primary-deep:  #059669;
+  --c-primary-ink:   #022c22;
+  --c-primary-tint:  rgba(52,211,153,0.07);
+  --c-primary-tint-stat: rgba(52,211,153,0.10);
+
+  --shadow-play-btn:  0 6px 28px rgba(52,211,153,0.45);
+  --shadow-seek-bar:  0 0  8px  rgba(52,211,153,0.55);
+  --shadow-seek-thumb:0 0 10px  rgba(52,211,153,0.50), 0 1px 4px rgba(0,0,0,0.50);
+  --shadow-sort-menu: 0 20px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(52,211,153,0.04);
+
+  background-color: var(--c-bg);
+}
+
+.timer-display:active {
+  border-color: rgba(52,211,153,0.30);
+  background: rgba(52,211,153,0.04);
+}
+
+.timer-btn-start {
+  background: linear-gradient(135deg, var(--c-primary), var(--c-primary-deep));
+  color: var(--c-primary-ink);
+}
+
+.timer-btn-cancel {
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.60);
+}
+.timer-btn-cancel:active { background: rgba(255,255,255,0.10); }
+
+.search-input:focus {
+  border-color: rgba(52,211,153,0.35);
+  background: rgba(52,211,153,0.03);
+}
+
+.sort-trigger:active {
+  border-color: rgba(255,255,255,0.15);
+  color: var(--c-text);
+}
+
+.sort-menu { box-shadow: var(--shadow-sort-menu); }
+
+.sort-item:active { background: rgba(255,255,255,0.07); }
+
+.track-idle {
+  border-color: var(--c-track-idle-border);
+  background: var(--c-surface);
+}
+.track-idle:active {
+  border-color: rgba(255,255,255,0.10);
+  background: var(--c-surface-hover);
+}
+.track-active {
+  border-color: rgba(52,211,153,0.25);
+  background: var(--c-primary-tint);
+  box-shadow: inset 0 0 0 1px rgba(52,211,153,0.08);
+}
+
+.stat-idle   { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.32); }
+.stat-active { background: var(--c-primary-tint-stat); color: rgba(110,231,183,0.65); }
+
+.seek-track  { background: rgba(255,255,255,0.10); }
+.seek-fill   {
+  background: linear-gradient(to right, var(--c-primary), var(--c-primary-soft));
+  box-shadow: var(--shadow-seek-bar);
+}
+.seek-thumb  { box-shadow: var(--shadow-seek-thumb); }
+
+.ctrl-btn { color: rgba(255,255,255,0.45); }
+.ctrl-btn:active {
+  background: rgba(255,255,255,0.07);
+  color: var(--c-text);
+}
+
+.play-btn {
+  background: linear-gradient(135deg, var(--c-primary), var(--c-primary-deep));
+  color: var(--c-primary-ink);
+  box-shadow: var(--shadow-play-btn);
+}
+</style>
