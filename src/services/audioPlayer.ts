@@ -1,5 +1,3 @@
-import { Howl } from 'howler'
-
 import type { ArchiveAudio } from '@/services/audioApi'
 
 interface AudioPlayerListeners {
@@ -13,136 +11,170 @@ interface AudioPlayerListeners {
 }
 
 class AudioPlayer {
-  private howl: Howl | null = null
-  private preloadedHowl: Howl | null = null
+  private audio: HTMLAudioElement
   private listeners: AudioPlayerListeners = {}
   private currentTrackId = ''
   private preloadedTrackId = ''
+  private mediaSessionActive = false
+
+  constructor() {
+    this.audio = new Audio()
+    this.audio.crossOrigin = 'anonymous'
+    this.setupMediaSession()
+  }
 
   configure(listeners: AudioPlayerListeners) {
     this.listeners = listeners
   }
 
-  async load(track: ArchiveAudio, options?: { force?: boolean }) {
-    if (this.currentTrackId === track.id && this.howl && !options?.force) {
-      return
-    }
-
-    this.unloadCurrent()
-
+  async load(track: ArchiveAudio) {
     this.currentTrackId = track.id
-    if (this.preloadedTrackId === track.id && this.preloadedHowl) {
-      this.howl = this.preloadedHowl
-      this.preloadedHowl = null
-      this.preloadedTrackId = ''
-      this.attachListeners(this.howl)
-      return
-    }
+    this.audio.src = track.url
+    this.audio.currentTime = 0
+    
+    return new Promise<void>((resolve, reject) => {
+      const onCanPlayThrough = () => {
+        cleanup()
+        this.listeners.onLoad?.()
+        resolve()
+      }
 
-    this.howl = this.createHowl(track, true)
+      const onError = () => {
+        cleanup()
+        const message = `Load error: ${this.audio.error?.message || 'Unknown error'}`
+        this.listeners.onError?.(message)
+        reject(new Error(message))
+      }
+
+      const cleanup = () => {
+        this.audio.removeEventListener('canplaythrough', onCanPlayThrough)
+        this.audio.removeEventListener('error', onError)
+      }
+
+      this.audio.addEventListener('canplaythrough', onCanPlayThrough, { once: true })
+      this.audio.addEventListener('error', onError, { once: true })
+      this.audio.load()
+    })
   }
 
   preload(track: ArchiveAudio) {
-    if (this.currentTrackId === track.id) {
+    if (this.preloadedTrackId === track.id) {
       return
     }
-
-    if (this.preloadedTrackId === track.id && this.preloadedHowl) {
-      return
-    }
-
-    this.unloadPreloaded()
+    
     this.preloadedTrackId = track.id
-    this.preloadedHowl = this.createHowl(track, false)
+    
+    // Create a separate audio element for preloading
+    const preloadAudio = new Audio()
+    preloadAudio.crossOrigin = 'anonymous'
+    preloadAudio.src = track.url
+    preloadAudio.preload = 'auto'
+    preloadAudio.load()
   }
 
   play() {
-    this.howl?.play()
+    this.updateMediaSession('play')
+    this.audio.play().catch(() => {
+      // Handle autoplay policy or other errors
+    })
   }
 
   pause() {
-    this.howl?.pause()
+    this.updateMediaSession('pause')
+    this.audio.pause()
+  }
+
+  stop() {
+    this.audio.pause()
+    this.audio.currentTime = 0
   }
 
   hasTrack(trackId?: string) {
     if (!trackId) {
-      return Boolean(this.howl)
+      return Boolean(this.audio.src)
     }
-
-    return Boolean(this.howl) && this.currentTrackId === trackId
-  }
-
-  stop() {
-    this.howl?.stop()
-  }
-
-  private createHowl(track: ArchiveAudio, attachEvents: boolean) {
-    const howl = new Howl({
-      src: [track.url],
-      html5: true,
-      preload: true,
-      format: ['mp3'],
-    })
-
-    if (attachEvents) {
-      this.attachListeners(howl)
-    }
-
-    howl.on('loaderror', (_soundId: number, error: unknown) => {
-      this.listeners.onError?.(`Load error: ${String(error)}`)
-    })
-    howl.on('playerror', (_soundId: number, error: unknown) => {
-      this.listeners.onError?.(`Playback error: ${String(error)}`)
-    })
-
-    return howl
-  }
-
-  private attachListeners(howl: Howl) {
-    howl.off('play')
-    howl.off('pause')
-    howl.off('stop')
-    howl.off('end')
-    howl.off('load')
-    howl.off('seek')
-
-    howl.on('play', () => this.listeners.onPlay?.())
-    howl.on('pause', () => this.listeners.onPause?.())
-    howl.on('stop', () => this.listeners.onStop?.())
-    howl.on('end', () => this.listeners.onEnd?.())
-    howl.on('load', () => this.listeners.onLoad?.())
-    howl.on('seek', () => this.listeners.onSeek?.())
-  }
-
-  private unloadCurrent() {
-    this.howl?.unload()
-    this.howl = null
-    this.currentTrackId = ''
-  }
-
-  private unloadPreloaded() {
-    this.preloadedHowl?.unload()
-    this.preloadedHowl = null
-    this.preloadedTrackId = ''
-  }
-
-  unload() {
-    this.unloadCurrent()
-    this.unloadPreloaded()
+    return this.currentTrackId === trackId
   }
 
   seek(value: number) {
-    this.howl?.seek(value)
-    this.listeners.onSeek?.()
+    this.audio.currentTime = value
   }
 
   getCurrentTime() {
-    const value = this.howl?.seek()
-    return typeof value === 'number' ? value : 0
+    return this.audio.currentTime
   }
 
   getDuration() {
-    return this.howl?.duration() ?? 0
+    return this.audio.duration
+  }
+
+  getAudio() {
+    return this.audio
+  }
+
+  private setupMediaSession() {
+    if (!navigator.mediaSession) {
+      return
+    }
+
+    this.audio.addEventListener('play', () => {
+      this.updateMediaSession('play')
+    })
+
+    this.audio.addEventListener('pause', () => {
+      this.updateMediaSession('pause')
+    })
+
+    // Media session handlers
+    navigator.mediaSession.setActionHandler('play', () => {
+      this.play()
+    })
+
+    navigator.mediaSession.setActionHandler('pause', () => {
+      this.pause()
+    })
+
+    navigator.mediaSession.setActionHandler('stop', () => {
+      this.stop()
+    })
+
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      this.listeners.onEnd?.()
+    })
+
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      this.listeners.onEnd?.()
+    })
+  }
+
+  private updateMediaSession(state: 'play' | 'pause') {
+    if (!navigator.mediaSession || !this.mediaSessionActive) {
+      return
+    }
+
+    navigator.mediaSession.playbackState = state === 'play' ? 'playing' : 'paused'
+  }
+
+  setMediaSessionMetadata(track: ArchiveAudio) {
+    if (!navigator.mediaSession) {
+      return
+    }
+
+    this.mediaSessionActive = true
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: track.title || 'Unknown Track',
+      artist: 'Archive',
+      album: 'Playlist',
+    })
+
+    navigator.mediaSession.playbackState = this.audio.paused ? 'paused' : 'playing'
+  }
+
+  unload() {
+    this.audio.pause()
+    this.audio.src = ''
+    this.currentTrackId = ''
+    this.preloadedTrackId = ''
   }
 }
 

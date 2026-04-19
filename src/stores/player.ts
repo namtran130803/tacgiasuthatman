@@ -143,52 +143,54 @@ export const usePlayerStore = defineStore('player', () => {
     const nextQueueIndex = baseQueueIndex >= 0 ? (baseQueueIndex + 1) % queue.length : 0
     const nextTrackId = queue[nextQueueIndex]
     const nextTrack = audios.value.find((track) => track.id === nextTrackId)
+    
     if (!nextTrack) {
       return
     }
-
     audioPlayer.preload(nextTrack)
   }
 
   function bindPlayerEvents() {
+    const audio = audioPlayer.getAudio()
+
+    audio.addEventListener('play', () => {
+      playing.value = true
+      playerState.value = 'playing'
+      error.value = ''
+      duration.value = audioPlayer.getDuration()
+      startProgressTimer()
+
+      console.log('Started playing:', currentAudio.value)
+      preloadNextTrack()
+      writeSnapshot()
+    })
+
+    audio.addEventListener('pause', () => {
+      playing.value = false
+      playerState.value = currentAudio.value ? 'paused' : 'idle'
+      syncProgress()
+      stopProgressTimer()
+      writeSnapshot()
+    })
+
+    audio.addEventListener('ended', () => {
+      stopProgressTimer()
+      if (currentAudio.value) {
+        incrementPlayCount(currentAudio.value.id)
+      }
+      const nextIndex = resolveQueueTargetIndex(1)
+      if (nextIndex >= 0) {
+        void playAt(nextIndex)
+      }
+    })
+
+    audio.addEventListener('timeupdate', syncProgress)
+    audio.addEventListener('seeked', syncProgress)
+
     audioPlayer.configure({
-      onPlay: () => {
-        playing.value = true
-        playerState.value = 'playing'
-        error.value = ''
-        duration.value = audioPlayer.getDuration()
-        startProgressTimer()
-        preloadNextTrack()
-        writeSnapshot()
-      },
-      onPause: () => {
-        playing.value = false
-        playerState.value = currentAudio.value ? 'paused' : 'idle'
-        syncProgress()
-        stopProgressTimer()
-        writeSnapshot()
-      },
-      onStop: () => {
-        playing.value = false
-        currentTime.value = 0
-        playerState.value = currentAudio.value ? 'paused' : 'idle'
-        stopProgressTimer()
-        writeSnapshot()
-      },
-      onEnd: () => {
-        stopProgressTimer()
-        if (currentAudio.value) {
-          incrementPlayCount(currentAudio.value.id)
-        }
-        const nextIndex = resolveQueueTargetIndex(1)
-        if (nextIndex >= 0) {
-          void playAt(nextIndex)
-        }
-      },
       onLoad: () => {
         duration.value = audioPlayer.getDuration()
       },
-      onSeek: syncProgress,
       onError: (message) => {
         error.value = message
         playing.value = false
@@ -253,7 +255,10 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  async function playAt(index: number, options?: { startAt?: number }) {
+  async function performPlayAt(
+    index: number,
+    options: { startAt?: number } | undefined,
+  ) {
     const track = audios.value[index]
     if (!track) {
       return
@@ -267,12 +272,29 @@ export const usePlayerStore = defineStore('player', () => {
     playerState.value = 'buffering'
     writeSnapshot()
 
-    await audioPlayer.load(track, { force: true })
-    preloadNextTrack(index)
+    await audioPlayer.load(track)
+    audioPlayer.setMediaSessionMetadata(track)
+
     if (startAt > 0) {
       audioPlayer.seek(startAt)
     }
     audioPlayer.play()
+  }
+
+  async function playAt(index: number, options?: { startAt?: number }) {
+    const track = audios.value[index]
+    if (!track) {
+      return
+    }
+
+    try {
+      await performPlayAt(index, options)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Load failed'
+      error.value = message
+      playerState.value = 'error'
+      writeSnapshot()
+    }
   }
 
   function replayCurrent() {
@@ -352,36 +374,9 @@ export const usePlayerStore = defineStore('player', () => {
     await playAt(previousIndex)
   }
 
-  async function shuffleAndPlay(trackIds?: string[]) {
-    if (audios.value.length === 0) {
-      return
-    }
-
-    if (!trackIds || trackIds.length === 0) {
-      audios.value = shuffleArray(audios.value)
-      shuffle.value = true
-      await playAt(0)
-      return
-    }
-
-    const trackMap = new Map(audios.value.map((track) => [track.id, track]))
-    const uniqueIds = Array.from(new Set(trackIds)).filter((id) => trackMap.has(id))
-    if (uniqueIds.length === 0) {
-      return
-    }
-
-    const subset = uniqueIds
-      .map((id) => trackMap.get(id))
-      .filter((track): track is ArchiveAudio => Boolean(track))
-
-    const shuffledSubset = shuffleArray(subset)
-    const subsetIdSet = new Set(uniqueIds)
-    const remainingTracks = audios.value.filter((track) => !subsetIdSet.has(track.id))
-
-    audios.value = [...shuffledSubset, ...remainingTracks]
-    shuffle.value = true
-    await playAt(0)
-    writeSnapshot()
+  async function randomTrack(trackIds: string[]): Promise<string> {
+    const randomIndex = Math.floor(Math.random() * trackIds.length)
+    return trackIds[randomIndex] as string
   }
 
   function seekTo(value: number) {
@@ -420,7 +415,7 @@ export const usePlayerStore = defineStore('player', () => {
     setPlaybackQueue,
     togglePlayback,
     pausePlayback,
-    shuffleAndPlay,
+    randomTrack,
     seekTo,
     dispose,
   }

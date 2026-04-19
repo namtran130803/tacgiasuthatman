@@ -51,10 +51,19 @@ interface CachedLibrary {
   fetchedAt: number
 }
 
+interface ArchiveServerInfo {
+  server: string
+  dir: string
+  fetchedAt: number
+}
+
 const CACHE_PREFIX = 'archive-player:library:v3'
 const CACHE_TTL = 1000 * 60 * 30
+const SERVER_CACHE_KEY = 'archive-player:server:v1'
+const IDENTIFIER = 'namtran-tacgiasuthatman'
 const DEFAULT_PLAYLIST_URL = 'https://archive.org/download/namtran-tacgiasuthatman/data.json'
 const DEFAULT_DOWNLOAD_BASE_URL = 'https://archive.org/download/namtran-tacgiasuthatman'
+const METADATA_API_URL = `https://archive.org/metadata/${IDENTIFIER}/`
 
 function removeExtension(value: string) {
   return value.replace(/\.[^/.]+$/, '')
@@ -99,6 +108,75 @@ function writeCache(sourceUrl: string, audios: ArchiveAudio[]) {
   }
 
   localStorage.setItem(getCacheKey(sourceUrl), JSON.stringify(payload))
+}
+
+function readServerCache() {
+  const raw = localStorage.getItem(SERVER_CACHE_KEY)
+  if (!raw) {
+    return null
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ArchiveServerInfo
+    // Cache server info for 24 hours
+    if (Date.now() - parsed.fetchedAt > 1000 * 60 * 60 * 24) {
+      localStorage.removeItem(SERVER_CACHE_KEY)
+      return null
+    }
+
+    return parsed
+  } catch {
+    localStorage.removeItem(SERVER_CACHE_KEY)
+    return null
+  }
+}
+
+function writeServerCache(serverInfo: Omit<ArchiveServerInfo, 'fetchedAt'>) {
+  const payload: ArchiveServerInfo = {
+    ...serverInfo,
+    fetchedAt: Date.now(),
+  }
+  localStorage.setItem(SERVER_CACHE_KEY, JSON.stringify(payload))
+}
+
+async function fetchMetadata() {
+  try {
+    const response = await fetch(METADATA_API_URL)
+    if (!response.ok) {
+      throw new Error(`Metadata request failed with status ${response.status}.`)
+    }
+
+    const data = await response.json() as any
+    const server = data?.alternate_locations?.servers?.[0]?.server
+    const dir = data?.alternate_locations?.servers?.[0]?.dir
+
+    if (server && dir) {
+      return { server, dir }
+    }
+
+    throw new Error('Missing server info in metadata response.')
+  } catch (err) {
+    console.warn('Failed to fetch metadata:', err)
+    return null
+  }
+}
+
+async function getServerInfo() {
+  // Try cache first
+  const cached = readServerCache()
+  if (cached) {
+    return { server: cached.server, dir: cached.dir }
+  }
+
+  // Fetch from API
+  const fetched = await fetchMetadata()
+  if (fetched) {
+    writeServerCache(fetched)
+    return fetched
+  }
+
+  // Fallback to defaults
+  return null
 }
 
 function toSafeNumber(value: unknown) {
@@ -161,7 +239,8 @@ export async function fetchArchiveAudios(
   options?: { force?: boolean; downloadBaseUrl?: string },
 ) {
   const normalizedSourceUrl = sourceUrl.trim() || DEFAULT_PLAYLIST_URL
-  const normalizedDownloadBaseUrl = (options?.downloadBaseUrl || DEFAULT_DOWNLOAD_BASE_URL).trim()
+  let normalizedDownloadBaseUrl = (options?.downloadBaseUrl || DEFAULT_DOWNLOAD_BASE_URL).trim()
+  let normalizedPlaylistUrl = normalizedSourceUrl
 
   if (!options?.force) {
     const cached = readCache(normalizedSourceUrl)
@@ -170,7 +249,14 @@ export async function fetchArchiveAudios(
     }
   }
 
-  const response = await fetch(normalizedSourceUrl)
+  // Try to get dynamic server info from metadata
+  const serverInfo = await getServerInfo()
+  if (serverInfo) {
+    normalizedDownloadBaseUrl = `https://${serverInfo.server}${serverInfo.dir}`
+    normalizedPlaylistUrl = `${normalizedDownloadBaseUrl}/data.json`
+  }
+
+  const response = await fetch(normalizedPlaylistUrl)
   if (!response.ok) {
     throw new Error(`Playlist request failed with status ${response.status}.`)
   }

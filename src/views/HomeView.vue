@@ -7,6 +7,7 @@ import {
   Clock3,
   Heart,
   Headphones,
+  Loader2,
   MessageCircle,
   Pause,
   Play,
@@ -52,6 +53,7 @@ const sortMenuOpen = ref(homeViewState?.sortMenuOpen || false)
 const selectedSort = ref<TrackSortOption>(
   (homeViewState?.selectedSort as TrackSortOption | undefined) || 'newest',
 )
+const isTogglingPlayback = ref(false)
 let clockInterval: number | null = null
 let timerInterval: number | null = null
 let timerTimeout: number | null = null
@@ -142,14 +144,14 @@ function openTimerPicker() {
 function closeSortMenu()  { sortMenuOpen.value = false; writeViewState() }
 function toggleSortMenu() { sortMenuOpen.value = !sortMenuOpen.value; writeViewState() }
 
-async function playFirstFromCurrentList() {
+function playFirstFromCurrentList() {
   syncPlaybackQueue()
   const first = getPlaybackList()[0]
   if (!first) return
   const idx = player.audios.findIndex((t) => t.id === first.id)
-  if (idx >= 0) await player.playAt(idx)
+  if (idx >= 0) void player.playAt(idx)
 }
-async function handlePrimaryAction() {
+function handlePrimaryAction() {
   if (!timerValue.value) return
   clearSleepTimer()
   const now = new Date()
@@ -161,66 +163,71 @@ async function handlePrimaryAction() {
   timerTimeout  = window.setTimeout(() => { player.pausePlayback(); clearSleepTimer() }, timerDeadline.value - now.getTime())
   writeViewState()
 }
-async function selectTrack(trackId: string) {
+function selectTrack(trackId: string) {
   const idx = player.audios.findIndex((t) => t.id === trackId)
   if (idx < 0) return
   if (idx === player.currentIndex) { player.togglePlayback(); return }
-  await player.playAt(idx)
+  void player.playAt(idx)
 }
-async function handleReload() {
-  await player.loadAudios(PLAYLIST_SOURCE_URL, { force: true, downloadBaseUrl: DOWNLOAD_BASE_URL })
-  await nextTick(); await playFirstFromCurrentList()
+function handleReload() {
+  void player.loadAudios(PLAYLIST_SOURCE_URL, { force: true, downloadBaseUrl: DOWNLOAD_BASE_URL }).then(() => {
+    nextTick().then(() => playFirstFromCurrentList())
+  })
 }
-async function handlePrev() {
-  syncPlaybackQueue()
+function handlePrev() {
   if (!filteredAudios.value.length) return
   if (player.currentTime > 3) { player.seekTo(0); return }
-  await player.playPreviousInQueue()
+  void player.playPreviousInQueue().then(() => scrollActiveTrackIntoView())
 }
-async function handleNext() {
-  syncPlaybackQueue()
+function handleNext() {
   if (!filteredAudios.value.length) return
-  await player.playNextInQueue()
+  void player.playNextInQueue().then(() => scrollActiveTrackIntoView())
 }
-async function handleShuffle() {
-  await player.shuffleAndPlay(getPlaybackList().map((t) => t.id))
+function handleShuffle() {
+  void player.randomTrack(getPlaybackList().map((t) => t.id)).then((trackId) => {
+    selectTrack(trackId);
+    scrollActiveTrackIntoView()
+  })
 }
-async function handleTogglePlayback() {
-  player.togglePlayback(); await scrollActiveTrackIntoView()
+function handleTogglePlayback() {
+  if (isTogglingPlayback.value) return
+  isTogglingPlayback.value = true
+  player.togglePlayback()
+  void scrollActiveTrackIntoView()
+  setTimeout(() => { isTogglingPlayback.value = false }, 150)
 }
-async function applySort(next: TrackSortOption) {
-  selectedSort.value = next; writeViewState(); await playFirstFromCurrentList()
+function applySort(next: TrackSortOption) {
+  selectedSort.value = next; writeViewState(); playFirstFromCurrentList()
 }
-async function toggleSortGroup(desc: TrackSortOption, asc: TrackSortOption) {
-  await applySort(selectedSort.value === desc ? asc : desc)
+function toggleSortGroup(desc: TrackSortOption, asc: TrackSortOption) {
+  applySort(selectedSort.value === desc ? asc : desc)
 }
 function handleWindowPointerDown(e: PointerEvent) {
   if (!sortMenuOpen.value || !sortMenuRef.value) return
   const t = e.target
   if (t instanceof Node && !sortMenuRef.value.contains(t)) closeSortMenu()
 }
-async function scrollActiveTrackIntoView() {
-  await nextTick()
-  if (!scroller.value || !currentTrack.value) return
-  const i = filteredAudios.value.findIndex((t) => t.id === currentTrack.value!.id)
-  if (i < 0) return
-  scroller.value.scrollToItem(i - 1)
+function scrollActiveTrackIntoView() {
+  nextTick().then(() => {
+    if (!scroller.value || !currentTrack.value) return
+    const i = filteredAudios.value.findIndex((t) => t.id === currentTrack.value!.id)
+    if (i < 0) return
+    scroller.value.scrollToItem(i - 1)
+  })
 }
 
-watch(() => query.value, async (next, prev) => {
+watch(() => query.value, (next, prev) => {
   if (next === prev) return
   writeViewState()
-  if (filteredAudios.value.length > 0) await playFirstFromCurrentList()
+  if (filteredAudios.value.length > 0) playFirstFromCurrentList()
   else syncPlaybackQueue()
 })
 watch(() => timerValue.value, () => writeViewState())
 watch(() => filteredAudios.value.map((t) => t.id).join('|'), () => syncPlaybackQueue(), { immediate: true })
-watch(
-  () => [player.currentIndex, filteredAudios.value.map((t) => t.id).join('|')],
-  async () => await scrollActiveTrackIntoView(),
-)
+watch(() => player.currentIndex, () => scrollActiveTrackIntoView())
+watch(() => filteredAudios.value.map((t) => t.id).join('|'), () => scrollActiveTrackIntoView())
 
-onMounted(async () => {
+onMounted(() => {
   updateClock()
   clockInterval = window.setInterval(updateClock, 30000)
   window.addEventListener('pointerdown', handleWindowPointerDown)
@@ -234,10 +241,12 @@ onMounted(async () => {
   }
   writeViewState()
   if (player.identifier === PLAYLIST_SOURCE_URL && player.audios.length > 0) {
-    await scrollActiveTrackIntoView(); return
+    scrollActiveTrackIntoView()
+    return
   }
-  await player.loadAudios(PLAYLIST_SOURCE_URL, { downloadBaseUrl: DOWNLOAD_BASE_URL })
-  await scrollActiveTrackIntoView()
+  void player.loadAudios(PLAYLIST_SOURCE_URL, { downloadBaseUrl: DOWNLOAD_BASE_URL }).then(() => {
+    scrollActiveTrackIntoView()
+  })
 })
 onUnmounted(() => {
   if (clockInterval) window.clearInterval(clockInterval)
@@ -356,7 +365,7 @@ onUnmounted(() => {
         <div v-if="player.loading && player.audios.length === 0" class="flex flex-col gap-1.5 pt-1">
           <div
             v-for="n in 7" :key="n"
-            class="h-20 rounded-2xl bg-(--c-surface)"
+            class="h-20 rounded-2xl bg-(--c-surface) animate-pulse"
           />
         </div>
 
@@ -445,7 +454,7 @@ onUnmounted(() => {
 
             <div
               ref="seekSliderTrackRef"
-              class="seek-track relative h-0.75 flex-1 cursor-pointer touch-none select-none rounded-full"
+              class="seek-track relative h-2 flex-1 cursor-pointer touch-none select-none rounded-full"
               role="slider"
               :aria-valuemin="0"
               :aria-valuemax="displayDuration"
@@ -456,10 +465,6 @@ onUnmounted(() => {
               <div
                 class="seek-fill absolute inset-y-0 left-0 rounded-full"
                 :style="{ width: `${seekSliderProgress}%` }"
-              />
-              <div
-                class="seek-thumb absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white"
-                :style="{ left: `${seekSliderProgress}%` }"
               />
             </div>
 
@@ -477,7 +482,7 @@ onUnmounted(() => {
               :disabled="player.loading"
               @click="handleReload"
             >
-              <RefreshCcw class="h-5.5 w-5.5" />
+              <RefreshCcw class="h-5.5 w-5.5" :class="player.loading && 'animate-spin'" />
             </button>
 
             <button
@@ -492,12 +497,10 @@ onUnmounted(() => {
             <button
               type="button"
               class="play-btn flex h-15.5 w-15.5 items-center justify-center rounded-[18px]"
+              :disabled="isTogglingPlayback"
               @click="handleTogglePlayback"
             >
-              <div
-                v-if="buffering"
-                class="h-6 w-6 rounded-full border-[3px] border-(--c-primary-ink)/25 border-t-(--c-primary-ink)"
-              />
+              <Loader2 v-if="buffering" class="h-6 w-6 animate-spin" />
               <Pause v-else-if="player.playing" class="h-6 w-6" />
               <Play  v-else                      class="ml-0.5 h-6 w-6" />
             </button>
@@ -629,5 +632,8 @@ onUnmounted(() => {
   background: linear-gradient(135deg, var(--c-primary), var(--c-primary-deep));
   color: var(--c-primary-ink);
   box-shadow: var(--shadow-play-btn);
+}
+.play-btn:disabled {
+  opacity: 0.6;
 }
 </style>
